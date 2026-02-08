@@ -1,0 +1,13 @@
+<h2>⚠ Low Stock Alerts</h2>
+
+{% if products %}
+<ul>
+  {% for product in products %}
+  <li>
+    {{ product.name }} — Stock: {{ product.stock_quantity }} (Min:{{product.minimum_stock }})
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>✅ All products are sufficiently stocked.</p>
+{% endif %}
