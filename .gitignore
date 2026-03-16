@@ -1,0 +1,22 @@
+# Python / Django
+*.pyc
+__pycache__/
+*.pyo
+
+# Environment variables - NEVER commit this
+.env
+.env.*
+
+# Database
+db.sqlite3
+
+# Node / Tailwind
+node_modules/
+package-lock.json
+
+# Static files (generated)
+staticfiles/
+
+# OS
+.DS_Store
+Thumbs.db
