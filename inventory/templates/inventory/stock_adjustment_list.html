@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="p-6 md:p-10 w-full overflow-x-hidden">
+  <div class="flex justify-between items-center mb-8">
+    <div>
+      <h1 class="text-3xl font-bold text-slate-800 tracking-tight">Stock Adjustments</h1>
+      <p class="text-slate-500 mt-1">Manual corrections to physical inventory levels.</p>
+    </div>
+    <a href="{% url 'stock_adjustment_create' %}" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 shadow flex items-center gap-2">
+      <span>➕</span> New Adjustment
+    </a>
+  </div>
+
+  <div class="bg-white rounded-xl shadow border border-slate-100 overflow-hidden">
+    <table class="min-w-full divide-y divide-slate-200">
+      <thead class="bg-slate-50">
+        <tr>
+          <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+          <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Product</th>
+          <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+          <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Qty</th>
+          <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Reason</th>
+          <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">User</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200">
+        {% for adj in adjustments %}
+          <tr class="hover:bg-slate-50 transition">
+            <td class="px-6 py-4 text-sm text-slate-600">{{ adj.created_at|date:"M d, Y" }}</td>
+            <td class="px-6 py-4 text-sm font-medium text-slate-900">{{ adj.product.name }}</td>
+            <td class="px-6 py-4 text-sm">
+              {% if adj.adjustment_type == 'ADD' %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800">Add</span>
+              {% else %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800">Remove</span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 text-sm font-semibold text-slate-800">{{ adj.quantity }}</td>
+            <td class="px-6 py-4 text-sm text-slate-600">{{ adj.reason|default:"-" }}</td>
+            <td class="px-6 py-4 text-sm text-slate-500">{{ adj.user.username|default:"System" }}</td>
+          </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" class="px-6 py-8 text-center text-slate-500">
+            No stock adjustments recorded yet.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

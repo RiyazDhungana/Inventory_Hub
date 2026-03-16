@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="p-6 md:p-10 w-full overflow-x-hidden">
+  <div class="flex justify-between items-center mb-8">
+    <div>
+      <h1 class="text-3xl font-bold text-slate-800 tracking-tight">Vendors</h1>
+      <p class="text-slate-500 mt-1">Manage your suppliers and distributors.</p>
+    </div>
+    <a href="{% url 'vendor_create' %}" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 shadow flex items-center gap-2">
+      <span>➕</span> New Vendor
+    </a>
+  </div>
+
+  <div class="bg-white rounded-xl shadow border border-slate-100 overflow-hidden">
+    <table class="min-w-full divide-y divide-slate-200">
+      <thead class="bg-slate-50">
+        <tr>
+          <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Vendor Name</th>
+          <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Contact Info</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200">
+        {% for vendor in vendors %}
+        <tr class="hover:bg-slate-50 transition">
+          <td class="px-6 py-4 text-sm font-medium text-slate-900">{{ vendor.name }}</td>
+          <td class="px-6 py-4 text-sm text-slate-600">{{ vendor.contact_info|default:"-" }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="2" class="px-6 py-8 text-center text-slate-500">
+            No vendors found. Click "New Vendor" to add one.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

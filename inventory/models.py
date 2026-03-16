@@ -1,13 +1,20 @@
+# inventory/models.py
 from decimal import Decimal
+from datetime import timedelta, date
 
 from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db.models import Sum, F, DecimalField, ExpressionWrapper
 from django.utils.timezone import now
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
+from .utils import send_low_stock_email, send_expiry_alert_email
 
-# ---------- CORE MODELS ----------
+# ----------------------
+# CORE MODELS
+# ----------------------
 
 class Vendor(models.Model):
     name = models.CharField(max_length=100)
@@ -27,6 +34,9 @@ class Product(models.Model):
     stock_quantity = models.IntegerField(default=0)
     minimum_stock = models.IntegerField(default=10)
 
+    # Shelf life in days
+    shelf_life_days = models.PositiveIntegerField(default=0)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -36,37 +46,28 @@ class Product(models.Model):
         return self.stock_quantity <= self.minimum_stock
 
     def clean(self):
-        # Rule 1: stock can never be negative
         if self.stock_quantity < 0:
             raise ValidationError("Stock quantity cannot be negative.")
 
-        # Rule 2: lock prices after any transaction
         if self.pk:
             from .models import SaleItem, PurchaseItem
-
             has_transactions = (
-                SaleItem.objects.filter(product=self).exists()
-                or PurchaseItem.objects.filter(product=self).exists()
+                SaleItem.objects.filter(product=self).exists() or
+                PurchaseItem.objects.filter(product=self).exists()
             )
-
             if has_transactions:
                 old = Product.objects.get(pk=self.pk)
-                if (
-                    self.cost_price != old.cost_price
-                    or self.selling_price != old.selling_price
-                ):
-                    raise ValidationError(
-                        "Cannot change prices after transactions exist."
-                    )
+                if self.cost_price != old.cost_price:
+                    raise ValidationError("Cannot change cost price after transactions exist.")
 
     def save(self, *args, **kwargs):
-        # Rule 3: stock_quantity cannot be manually edited
-        if self.pk:
+        # Flag to skip stock validation
+        skip_stock_validation = kwargs.pop("skip_stock_validation", False)
+
+        if self.pk and not skip_stock_validation:
             old = Product.objects.get(pk=self.pk)
             if self.stock_quantity != old.stock_quantity:
-                raise ValidationError(
-                    "Stock quantity cannot be modified directly."
-                )
+                raise ValidationError("Stock quantity cannot be modified directly.")
 
         self.full_clean()
         super().save(*args, **kwargs)
@@ -91,28 +92,29 @@ class Purchase(models.Model):
 
 
 class PurchaseItem(models.Model):
-    purchase = models.ForeignKey(
-        Purchase,
-        on_delete=models.CASCADE,
-        related_name="items"
-    )
+    purchase = models.ForeignKey(Purchase, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
 
     quantity = models.PositiveIntegerField()
     cost_price = models.DecimalField(max_digits=10, decimal_places=2)
-    total_cost = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        editable=False
-    )
+    total_cost = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
+
+    manufacture_date = models.DateField(null=True, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         with transaction.atomic():
             if not self.pk:
+                # Calculate total cost
                 self.total_cost = self.quantity * self.cost_price
 
+                # Update stock
                 self.product.stock_quantity += self.quantity
-                self.product.save(update_fields=["stock_quantity"])
+                self.product.save(update_fields=["stock_quantity"], skip_stock_validation=True)
+
+                # Calculate expiry date
+                if self.manufacture_date and self.product.shelf_life_days > 0:
+                    self.expiry_date = self.manufacture_date + timedelta(days=self.product.shelf_life_days)
 
             super().save(*args, **kwargs)
 
@@ -123,19 +125,26 @@ class PurchaseItem(models.Model):
 class Sale(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     sale_date = models.DateTimeField(auto_now_add=True)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    discount_authorized_by = models.CharField(max_length=100, blank=True)
+
+    @property
+    def total_revenue(self):
+        gross_revenue = sum((item.total_price for item in self.items.all() if item.total_price), start=Decimal("0.00"))
+        return max(Decimal("0.00"), gross_revenue - self.discount_amount)
 
     @property
     def total_profit(self):
-        return sum(
-            (item.profit for item in self.items.all()),
-            start=Decimal("0.00")
-        )
+        gross_profit = sum((item.profit for item in self.items.all()), start=Decimal("0.00"))
+        return gross_profit - self.discount_amount
 
     def __str__(self):
         return f"Sale #{self.id}"
 
 
-# ---------- REPORTING / QUERIES ----------
+# ----------------------
+# REPORTING / QUERIES
+# ----------------------
 
 class SaleItemQuerySet(models.QuerySet):
     def with_profit(self):
@@ -151,10 +160,21 @@ class SaleItemQuerySet(models.QuerySet):
         )
 
     def total_revenue(self):
-        return self.aggregate(total=Sum("total_price"))["total"] or Decimal("0.00")
+        # To avoid over-subtracting discounts when filtering by joined items, 
+        # we calculate gross revenue on items, and subtract unique sale discounts in Python.
+        # However, for pure SaleItem QuerySet agg, we can subtract the Sum of distinct Sales' discounts:
+        gross_revenue = self.aggregate(total=Sum("total_price"))["total"] or Decimal("0.00")
+        sale_ids = self.values_list("sale_id", flat=True).distinct()
+        from .models import Sale
+        total_discount = Sale.objects.filter(id__in=sale_ids).aggregate(total=Sum("discount_amount"))["total"] or Decimal("0.00")
+        return max(Decimal("0.00"), gross_revenue - total_discount)
 
     def total_profit(self):
-        return self.with_profit().aggregate(total=Sum("profit"))["total"] or Decimal("0.00")
+        gross_profit = self.with_profit().aggregate(total=Sum("profit"))["total"] or Decimal("0.00")
+        sale_ids = self.values_list("sale_id", flat=True).distinct()
+        from .models import Sale
+        total_discount = Sale.objects.filter(id__in=sale_ids).aggregate(total=Sum("discount_amount"))["total"] or Decimal("0.00")
+        return gross_profit - total_discount
 
     def today(self):
         today = now().date()
@@ -162,53 +182,32 @@ class SaleItemQuerySet(models.QuerySet):
 
     def this_month(self):
         dt = now()
-        return self.filter(
-            sale__sale_date__year=dt.year,
-            sale__sale_date__month=dt.month
-        )
+        return self.filter(sale__sale_date__year=dt.year, sale__sale_date__month=dt.month)
 
 
 class SaleItem(models.Model):
-    sale = models.ForeignKey(
-        Sale,
-        on_delete=models.CASCADE,
-        related_name="items"
-    )
+    sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
 
-    total_price = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        editable=False,
-        null=True,
-        blank=True
-    )
+    total_price = models.DecimalField(max_digits=10, decimal_places=2, editable=False, null=True, blank=True)
 
     objects = SaleItemQuerySet.as_manager()
 
     def clean(self):
         if self.product and self.quantity:
             if self.product.stock_quantity < self.quantity:
-                raise ValidationError(
-                    {"quantity": f"Only {self.product.stock_quantity} items available."}
-                )
-
+                raise ValidationError({"quantity": f"Only {self.product.stock_quantity} items available."})
             if self.product.selling_price < self.product.cost_price:
-                raise ValidationError(
-                    "Selling price is lower than cost price."
-                )
+                raise ValidationError("Selling price is lower than cost price.")
 
     def save(self, *args, **kwargs):
         self.full_clean()
-
         with transaction.atomic():
             if not self.pk:
                 self.total_price = self.quantity * self.product.selling_price
-
                 self.product.stock_quantity -= self.quantity
-                self.product.save(update_fields=["stock_quantity"])
-
+                self.product.save(update_fields=["stock_quantity"], skip_stock_validation=True)
             super().save(*args, **kwargs)
 
     @property
@@ -226,11 +225,7 @@ class SaleItem(models.Model):
 class StockAdjustment(models.Model):
     ADD = "ADD"
     REMOVE = "REMOVE"
-
-    ADJUSTMENT_CHOICES = [
-        (ADD, "Add Stock"),
-        (REMOVE, "Remove Stock"),
-    ]
+    ADJUSTMENT_CHOICES = [(ADD, "Add Stock"), (REMOVE, "Remove Stock")]
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     adjustment_type = models.CharField(max_length=6, choices=ADJUSTMENT_CHOICES)
@@ -249,9 +244,36 @@ class StockAdjustment(models.Model):
                         raise ValidationError("Not enough stock to remove.")
                     self.product.stock_quantity -= self.quantity
 
-                self.product.save(update_fields=["stock_quantity"])
+                self.product.save(update_fields=["stock_quantity"], skip_stock_validation=True)
 
             super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.adjustment_type} {self.quantity} - {self.product.name}"
+
+
+# ----------------------
+# SIGNALS (AFTER ALL MODELS)
+# ----------------------
+
+@receiver(post_save, sender=Product)
+def check_low_stock(sender, instance, **kwargs):
+    if instance.is_low_stock():
+        recipients = [u.email for u in User.objects.filter(is_superuser=True) if u.email]
+        if recipients:
+            send_low_stock_email(instance.name, instance.stock_quantity, recipients)
+
+
+@receiver(post_save, sender=PurchaseItem)
+def check_expiry(sender, instance, **kwargs):
+    if instance.expiry_date:
+        alert_threshold = date.today() + timedelta(days=7)  # alert if expiring within 7 days
+        if instance.expiry_date <= alert_threshold:
+            recipients = [u.email for u in User.objects.filter(is_superuser=True) if u.email]
+            if recipients:
+                send_expiry_alert_email(
+                    product_name=instance.product.name,
+                    expiry_date=instance.expiry_date,
+                    recipients=recipients,
+                    quantity=instance.quantity
+                )

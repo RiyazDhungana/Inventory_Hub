@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="p-6 md:p-10 w-full max-w-6xl mx-auto overflow-x-hidden">
+  <div class="mb-8">
+    <a href="{% url 'product_list' %}" class="text-blue-600 hover:underline text-sm font-medium mb-4 inline-block">&larr; Back to Products</a>
+    <h1 class="text-3xl font-bold text-slate-800 tracking-tight">Add Products</h1>
+    <p class="text-slate-500 mt-1">Register new items to the master product catalog. You can add multiple items at once.</p>
+  </div>
+
+  <div class="bg-white rounded-xl shadow border border-slate-100 p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+      
+      {% if form_error %}
+        <div class="p-4 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
+          ⚠ {{ form_error }}
+        </div>
+      {% endif %}
+
+      <div class="mb-4">
+        <h2 class="text-lg font-semibold text-slate-800 mb-1">Product Details</h2>
+        <p class="text-sm text-slate-500 mb-4">Add all the new products you want to register.</p>
+      </div>
+
+      <div id="product-items" class="space-y-6">
+        <!-- Single Row -->
+        <div class="product-item-row p-5 border border-slate-200 rounded-lg bg-slate-50 relative">
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+            
+            <div class="md:col-span-3">
+              <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Name *</label>
+              <input type="text" name="name" required class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Product Name">
+            </div>
+
+            <div class="md:col-span-3">
+              <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Description</label>
+              <input type="text" name="description" class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Short Desc">
+            </div>
+
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Cost (Rs) *</label>
+              <input type="number" name="cost_price" step="0.01" min="0" required class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00">
+            </div>
+
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Sell (Rs) *</label>
+              <input type="number" name="selling_price" step="0.01" min="0" required class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00">
+            </div>
+
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Init Stock</label>
+              <input type="number" name="stock_quantity" min="0" value="0" required class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0">
+            </div>
+
+            <div class="md:col-span-2 md:col-start-9">
+              <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Min Alert</label>
+              <input type="number" name="minimum_stock" min="0" value="10" required class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="10">
+            </div>
+            
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Shelf Life (D)</label>
+              <input type="number" name="shelf_life_days" min="0" value="0" required class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0">
+            </div>
+
+          </div>
+          
+          <button type="button" class="absolute -top-3 -right-3 bg-white text-slate-400 hover:text-red-500 border border-slate-200 rounded-full p-1 shadow-sm hidden transition" data-remove-row title="Remove Item">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="pt-2">
+        <button type="button" id="add-item-btn" class="inline-flex items-center gap-2 px-4 py-2 border border-dashed border-slate-300 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition">
+          <span>➕</span> Add Another Product
+        </button>
+      </div>
+
+      <div class="pt-6 mt-6 border-t border-slate-200 flex justify-end gap-4">
+        <a href="{% url 'product_list' %}" class="px-6 py-2.5 border border-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-50 transition">
+          Cancel
+        </a>
+        <button type="submit" class="px-8 py-2.5 bg-blue-600 text-white font-medium rounded-lg shadow-sm hover:bg-blue-700 hover:shadow transition">
+          Save Products
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const container = document.getElementById("product-items");
+    const addBtn = document.getElementById("add-item-btn");
+
+    if (!container || !addBtn) return;
+
+    addBtn.addEventListener("click", function () {
+      const rows = container.getElementsByClassName("product-item-row");
+      if (!rows.length) return;
+
+      const firstRow = rows[0];
+      const newRow = firstRow.cloneNode(true);
+
+      // Reset values
+      const inputs = newRow.getElementsByTagName("input");
+      for (let i of inputs) {
+        if (i.name === 'stock_quantity' || i.name === 'shelf_life_days') {
+            i.value = "0";
+        } else if (i.name === 'minimum_stock') {
+            i.value = "10";
+        } else {
+            i.value = "";
+        }
+      }
+
+      // Show remove button on cloned rows
+      const removeBtn = newRow.querySelector("[data-remove-row]");
+      if (removeBtn) {
+        removeBtn.classList.remove("hidden");
+      }
+
+      container.appendChild(newRow);
+    });
+
+    container.addEventListener("click", function (e) {
+      if (e.target && (e.target.hasAttribute("data-remove-row") || e.target.closest("[data-remove-row]"))) {
+        const rows = container.getElementsByClassName("product-item-row");
+        if (rows.length <= 1) return; // keep at least one row
+        
+        const row = e.target.closest(".product-item-row");
+        if (row) {
+          container.removeChild(row);
+        }
+      }
+    });
+  });
+</script>
+{% endblock %}

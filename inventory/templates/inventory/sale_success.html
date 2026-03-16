@@ -1,3 +1,19 @@
-<h3>✅ Sale recorded successfully!</h3>
-
-<a href="{% url 'create_sale' %}">Create another sale</a>
+{% extends 'base.html' %}
+{% block content %}
+<div class="p-6 md:p-10 w-full max-w-4xl mx-auto flex flex-col items-center justify-center h-full text-center">
+  <div class="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-4xl mb-6 shadow-sm">
+    ✅
+  </div>
+  <h1 class="text-3xl font-bold text-slate-800 tracking-tight mb-2">Sale Recorded Successfully!</h1>
+  <p class="text-slate-500 mb-8 max-w-sm">The inventory has been updated and the sale transaction has been logged securely.</p>
+  
+  <div class="flex items-center gap-4">
+    <a href="{% url 'sale_list' %}" class="px-6 py-2.5 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition">
+      View All Sales
+    </a>
+    <a href="{% url 'create_sale' %}" class="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 shadow-sm transition">
+      Create Another Sale
+    </a>
+  </div>
+</div>
+{% endblock %}

@@ -1,15 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-
-from .models import (
-    Product,
-    Vendor,
-    Purchase,
-    PurchaseItem,
-    Sale,
-    SaleItem,
-    StockAdjustment,
-)
+from .models import Product, Vendor, Purchase, PurchaseItem, Sale, SaleItem, StockAdjustment
 
 # =========================
 # INLINE CLASSES
@@ -17,7 +8,8 @@ from .models import (
 
 class PurchaseItemInline(admin.TabularInline):
     model = PurchaseItem
-    readonly_fields = ("total_cost",)
+    readonly_fields = ("total_cost", "expiry_date")  # expiry_date read-only
+    fields = ("product", "quantity", "cost_price", "manufacture_date", "expiry_date", "total_cost")
     extra = 0
 
     def has_change_permission(self, request, obj=None):
@@ -55,7 +47,6 @@ class StockAdjustmentInline(admin.TabularInline):
     def has_add_permission(self, request, obj=None):
         return False
 
-
 # =========================
 # PRODUCT ADMIN
 # =========================
@@ -66,6 +57,7 @@ class ProductAdmin(admin.ModelAdmin):
         "name",
         "stock_quantity",
         "minimum_stock",
+        "shelf_life_days",  # Show shelf life in admin list
         "stock_badge",
     )
 
@@ -76,24 +68,23 @@ class ProductAdmin(admin.ModelAdmin):
     list_filter = ("minimum_stock",)
 
     def has_delete_permission(self, request, obj=None):
-        return False  # 🔒 Rule: Products are never deleted
+        return False  # Products are never deleted
 
     def stock_badge(self, obj):
         if obj.stock_quantity == 0:
-            return format_html(
-                '<span style="color:white; background:#f59e0b; padding:4px 8px; border-radius:6px;">OUT</span>'
-            )
+            color = "#f59e0b"
+            label = "OUT"
         elif obj.is_low_stock():
-            return format_html(
-                '<span style="color:white; background:#dc2626; padding:4px 8px; border-radius:6px;">LOW</span>'
-            )
+            color = "#dc2626"
+            label = "LOW"
+        else:
+            color = "#16a34a"
+            label = "OK"
         return format_html(
-            '<span style="color:white; background:#16a34a; padding:4px 8px; border-radius:6px;">OK</span>'
+            '<span style="color:white; background:{}; padding:4px 8px; border-radius:6px;">{}</span>',
+            color, label
         )
-
     stock_badge.short_description = "Stock"
-
-
 
 # =========================
 # OTHER ADMINS
@@ -118,7 +109,6 @@ class PurchaseAdmin(admin.ModelAdmin):
         return False
 
 
-
 @admin.register(Sale)
 class SaleAdmin(admin.ModelAdmin):
     list_display = ("id", "user", "sale_date", "total_profit")
@@ -127,7 +117,6 @@ class SaleAdmin(admin.ModelAdmin):
 
     def total_profit(self, obj):
         return obj.total_profit
-
     total_profit.short_description = "Total Profit"
 
     def has_change_permission(self, request, obj=None):
@@ -173,4 +162,3 @@ class StockAdjustmentAdmin(admin.ModelAdmin):
         if not obj.pk:
             obj.user = request.user
         super().save_model(request, obj, form, change)
-

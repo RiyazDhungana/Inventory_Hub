@@ -1,0 +1,301 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="p-6 md:p-10 w-full overflow-x-hidden">
+  
+  <div class="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold text-slate-800 tracking-tight">Dashboard</h1>
+      <p class="text-slate-500 mt-1">Here is an overview of your inventory system.</p>
+    </div>
+    
+    <form method="get" class="flex items-center gap-3">
+      <label for="period" class="text-sm font-medium text-slate-600">Period:</label>
+      <select 
+        name="period" 
+        id="period" 
+        onchange="this.form.submit()" 
+        class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm outline-none transition cursor-pointer"
+      >
+        <option value="today" {% if period == 'today' %}selected{% endif %}>Today</option>
+        <option value="week" {% if period == 'week' %}selected{% endif %}>This Week</option>
+        <option value="month" {% if period == 'month' %}selected{% endif %}>This Month</option>
+      </select>
+    </form>
+  </div>
+
+    <!-- Metrics row -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div class="bg-white rounded-xl shadow border border-slate-100 p-6 flex items-center justify-between">
+        <div>
+          <p class="text-slate-500 text-sm font-medium mb-1">
+            {% if period == 'today' %}Today's{% elif period == 'week' %}This Week's{% else %}This Month's{% endif %} Revenue
+          </p>
+          <p class="text-3xl font-bold text-slate-800">Rs {{ period_revenue|floatformat:2 }}</p>
+        </div>
+        <div class="text-3xl">💰</div>
+      </div>
+      <div class="bg-white rounded-xl shadow border border-slate-100 p-6 flex items-center justify-between">
+        <div>
+          <p class="text-slate-500 text-sm font-medium mb-1">
+            {% if period == 'today' %}Today's{% elif period == 'week' %}This Week's{% else %}This Month's{% endif %} Profit
+          </p>
+          <p class="text-3xl font-bold text-green-600">Rs {{ period_profit|floatformat:2 }}</p>
+        </div>
+        <div class="text-3xl">📈</div>
+      </div>
+      <div class="bg-white rounded-xl shadow border border-slate-100 p-6 flex items-center justify-between">
+        <div>
+          <p class="text-slate-500 text-sm font-medium mb-1">
+            {% if period == 'today' %}Today's{% elif period == 'week' %}This Week's{% else %}This Month's{% endif %} Discounts
+          </p>
+          <p class="text-3xl font-bold text-red-500">Rs {{ period_discount|floatformat:2 }}</p>
+        </div>
+        <div class="text-3xl">📉</div>
+      </div>
+      <div class="bg-white rounded-xl shadow border border-slate-100 p-6 flex items-center justify-between">
+        <div>
+          <p class="text-slate-500 text-sm font-medium mb-1">Low Stock Items</p>
+          <p class="text-3xl font-bold text-amber-500">{{ low_stock_count }}</p>
+        </div>
+        <div class="text-3xl">⚠️</div>
+      </div>
+    </div>
+
+    <!-- Charts row 1: Financial & Sales Volume -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <!-- Revenue & Profit -->
+      <div class="bg-white rounded-xl shadow border border-slate-100 p-6">
+        <h2 class="text-lg font-semibold text-slate-800 mb-4">
+          Revenue & Profit 
+          <span class="text-sm font-normal text-slate-500">
+            ({% if period == 'today' %}Today{% elif period == 'week' %}Last 7 Days{% else %}This Month{% endif %})
+          </span>
+        </h2>
+        <div class="h-64">
+          <canvas id="revenueProfitChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Top products by Quantity -->
+      <div class="bg-white rounded-xl shadow border border-slate-100 p-6">
+        <h2 class="text-lg font-semibold text-slate-800 mb-4">Top 5 Selling Products (By Volume)</h2>
+        <div class="h-64">
+          <canvas id="topQuantityChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts row 2 & Tables: Advanced Metrics -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      <!-- Top products by Revenue (Doughnut) -->
+      <div class="bg-white rounded-xl shadow border border-slate-100 p-6 lg:col-span-1">
+        <h2 class="text-lg font-semibold text-slate-800 mb-4">Top Revenue Drivers</h2>
+        <div class="h-64">
+          <canvas id="topProductsChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Fast & Slow Moving Data Tables -->
+      <div class="bg-white rounded-xl shadow border border-slate-100 p-6 lg:col-span-2 overflow-hidden">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 h-64 overflow-y-auto pr-2">
+          
+          <!-- Fast Moving -->
+          <div>
+            <h2 class="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <span>🚀</span> Fast Moving 
+              <span class="text-sm font-normal text-slate-500">
+                ({% if period == 'today' %}Today{% elif period == 'week' %}Last 7D{% else %}Month{% endif %})
+              </span>
+            </h2>
+            <ul class="space-y-3">
+              {% for item in fast_moving %}
+              <li class="flex items-center justify-between text-sm">
+                <span class="text-slate-700 truncate pr-2 font-medium">{{ item.product__name }}</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800 whitespace-nowrap">
+                  {{ item.sold }} sold
+                </span>
+              </li>
+              {% empty %}
+              <li class="text-slate-500 text-sm italic">No sales recorded yet.</li>
+              {% endfor %}
+            </ul>
+          </div>
+
+          <!-- Slow Moving -->
+          <div>
+            <h2 class="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <span>🐌</span> Slow Moving (0 Sales/30D)
+            </h2>
+            <ul class="space-y-3">
+              {% for item in slow_moving %}
+              <li class="flex items-center justify-between text-sm">
+                <span class="text-slate-700 truncate pr-2 font-medium">{{ item.name }}</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-600 whitespace-nowrap">
+                  {{ item.stock_quantity }} in stock
+                </span>
+              </li>
+              {% empty %}
+              <li class="text-slate-500 text-sm italic">Great! No stagnant inventory.</li>
+              {% endfor %}
+            </ul>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const ctx1 = document.getElementById("revenueProfitChart");
+    const ctx2 = document.getElementById("topProductsChart");
+    const ctx3 = document.getElementById("topQuantityChart");
+
+    const dateLabels = JSON.parse('{{ date_labels|default:"[]"|escapejs }}');
+    const revenueData = JSON.parse('{{ revenue_data|default:"[]"|escapejs }}');
+    const profitData = JSON.parse('{{ profit_data|default:"[]"|escapejs }}');
+    
+    const topNames = JSON.parse('{{ top_product_names|default:"[]"|escapejs }}');
+    const topRevenue = JSON.parse('{{ top_product_revenue|default:"[]"|escapejs }}');
+
+    const topQtyNames = JSON.parse('{{ top_qty_names|default:"[]"|escapejs }}');
+    const topQtyValues = JSON.parse('{{ top_qty_values|default:"[]"|escapejs }}');
+
+    if (ctx1 && dateLabels.length) {
+      new Chart(ctx1, {
+        type: "bar",
+        data: {
+          labels: dateLabels,
+          datasets: [
+            {
+              label: "Revenue",
+              data: revenueData,
+              backgroundColor: "rgba(34, 197, 94, 0.6)",
+              borderColor: "rgb(34, 197, 94)",
+              borderWidth: 1,
+              maxBarThickness: 60,
+            },
+            {
+              label: "Profit",
+              data: profitData,
+              backgroundColor: "rgba(59, 130, 246, 0.6)",
+              borderColor: "rgb(59, 130, 246)",
+              borderWidth: 1,
+              maxBarThickness: 60,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "bottom" },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  let label = context.dataset.label || '';
+                  if (label) {
+                    label += ': ';
+                  }
+                  if (context.parsed.y !== null) {
+                    label += 'Rs ' + parseFloat(context.parsed.y).toFixed(2);
+                  }
+                  return label;
+                }
+              }
+            }
+          },
+          scales: {
+            y: { 
+              beginAtZero: true,
+              ticks: {
+                callback: function(value, index, values) {
+                  return 'Rs ' + parseFloat(value).toFixed(2);
+                }
+              }
+            },
+          },
+        },
+      });
+    }
+
+    if (ctx3 && topQtyNames.length) {
+      new Chart(ctx3, {
+        type: "bar",
+        data: {
+          labels: topQtyNames,
+          datasets: [
+            {
+              label: "Units Sold",
+              data: topQtyValues,
+              backgroundColor: "rgba(14, 165, 233, 0.6)",
+              borderColor: "rgb(14, 165, 233)",
+              borderWidth: 1,
+              maxBarThickness: 40,
+            },
+          ],
+        },
+        options: {
+          indexAxis: 'y', // Horizontal bar chart
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+          },
+          scales: {
+            x: { beginAtZero: true },
+          },
+        },
+      });
+    }
+
+    if (ctx2 && topNames.length) {
+      new Chart(ctx2, {
+        type: "doughnut",
+        data: {
+          labels: topNames,
+          datasets: [
+            {
+              data: topRevenue,
+              backgroundColor: [
+                "rgba(99, 102, 241, 0.8)",
+                "rgba(168, 85, 247, 0.8)",
+                "rgba(236, 72, 153, 0.8)",
+                "rgba(244, 63, 94, 0.8)",
+                "rgba(245, 158, 11, 0.8)",
+              ],
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "right" },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  let label = context.label || '';
+                  if (label) {
+                    label += ': ';
+                  }
+                  if (context.parsed !== null) {
+                    label += 'Rs ' + parseFloat(context.parsed).toFixed(2);
+                  }
+                  return label;
+                }
+              }
+            }
+          },
+        },
+      });
+    }
+  });
+</script>
+{% endblock %}
+

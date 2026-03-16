@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="p-6 md:p-10 w-full max-w-7xl mx-auto overflow-x-hidden">
+  
+  <div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold text-slate-800 tracking-tight">Sales Report</h1>
+      <p class="text-slate-500 mt-1">Detailed breakdown of product sales and revenue.</p>
+    </div>
+    
+    <form method="get" class="flex flex-wrap items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+      <div class="flex items-center gap-2">
+        <label for="date_from" class="text-sm font-medium text-slate-600">From:</label>
+        <input type="date" name="date_from" id="date_from" value="{{ date_from|default_if_none:'' }}" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-sky-500 focus:border-sky-500 block p-2 outline-none">
+      </div>
+      <div class="flex items-center gap-2">
+        <label for="date_to" class="text-sm font-medium text-slate-600">To:</label>
+        <input type="date" name="date_to" id="date_to" value="{{ date_to|default_if_none:'' }}" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-sky-500 focus:border-sky-500 block p-2 outline-none">
+      </div>
+      <button type="submit" class="bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-sm">
+        Filter
+      </button>
+      {% if date_from or date_to %}
+      <a href="{% url 'sales_report' %}" class="text-slate-500 hover:text-slate-700 text-sm font-medium px-2 underline">Clear</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-xl shadow border border-slate-100 p-6">
+      <p class="text-slate-500 text-sm font-medium mb-1">Total Transactions</p>
+      <p class="text-3xl font-bold text-slate-800">{{ total_transactions }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow border border-slate-100 p-6">
+      <p class="text-slate-500 text-sm font-medium mb-1">Items Sold</p>
+      <p class="text-3xl font-bold text-slate-800">{{ total_items_sold }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow border border-slate-100 p-6">
+      <p class="text-slate-500 text-sm font-medium mb-1">Gross Revenue</p>
+      <p class="text-3xl font-bold text-slate-800">Rs {{ total_gross_revenue|floatformat:2 }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow border border-slate-100 p-6 bg-gradient-to-br from-green-50 to-white">
+      <p class="text-green-700 text-sm font-bold mb-1">Net Revenue (After Discounts)</p>
+      <p class="text-3xl font-bold text-green-700">Rs {{ total_net_revenue|floatformat:2 }}</p>
+      <p class="text-xs text-green-600/80 mt-1 font-medium">- Rs {{ total_discounts|floatformat:2 }} via Discounts</p>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="bg-white rounded-2xl shadow border border-slate-100 p-6 mb-8">
+    <h2 class="text-lg font-bold text-slate-800 mb-4">Daily Revenue Trend</h2>
+    <div class="h-72">
+      <canvas id="salesChart"></canvas>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
+    <div class="p-6 border-b border-slate-100 bg-slate-50">
+      <h2 class="text-lg font-bold text-slate-800">Product Sales Breakdown</h2>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200">
+            <th class="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Product Name</th>
+            <th class="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Quantity Sold</th>
+            <th class="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Gross Revenue Generated</th>
+            <th class="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center">Popularity</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-sm">
+          {% for product in product_sales %}
+          <tr class="hover:bg-slate-50/50 transition">
+            <td class="py-4 px-6 font-medium text-slate-800">{{ product.product__name }}</td>
+            <td class="py-4 px-6 text-right font-medium text-sky-600">{{ product.qty_sold }} units</td>
+            <td class="py-4 px-6 text-right font-bold text-slate-900">Rs {{ product.gross_revenue|floatformat:2 }}</td>
+            <td class="py-4 px-6 text-center">
+              {% if forloop.counter <= 3 %}
+                <span class="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-50 text-amber-600 text-xs font-bold border border-amber-200/50">🔥 Hot</span>
+              {% else %}
+                <span class="text-slate-400 font-medium text-xs">Standard</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4" class="py-12 text-center">
+              <p class="text-slate-500 font-medium">No sales recorded for this period.</p>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const ctx = document.getElementById("salesChart");
+    if (!ctx) return;
+
+    const labels = JSON.parse('{{ sales_date_labels|default:"[]"|escapejs }}');
+    const data = JSON.parse('{{ sales_revenue_data|default:"[]"|escapejs }}');
+
+    new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Gross Revenue",
+          data: data,
+          borderColor: "rgb(14, 165, 233)",
+          backgroundColor: "rgba(14, 165, 233, 0.1)",
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3,
+          pointBackgroundColor: "rgb(14, 165, 233)",
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+  });
+</script>
+{% endblock %}
