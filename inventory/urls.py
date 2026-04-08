@@ -36,10 +36,14 @@ urlpatterns = [
     # Products
     path("products/", views.product_list, name="product_list"),
     path("products/create/", views.product_create, name="product_create"),
+    path("products/<int:pk>/edit/", views.product_edit, name="product_edit"),
+    path("products/<int:pk>/delete/", views.product_delete, name="product_delete"),
 
     # Vendors
     path("vendors/", views.vendor_list, name="vendor_list"),
     path("vendors/create/", views.vendor_create, name="vendor_create"),
+    path("vendors/<int:pk>/edit/", views.vendor_edit, name="vendor_edit"),
+    path("vendors/<int:pk>/delete/", views.vendor_delete, name="vendor_delete"),
 
     # Purchases
     path("purchases/", views.purchase_list, name="purchase_list"),
@@ -48,4 +52,14 @@ urlpatterns = [
     # Stock Adjustments
     path("stock-adjustments/", views.stock_adjustment_list, name="stock_adjustment_list"),
     path("stock-adjustments/create/", views.stock_adjustment_create, name="stock_adjustment_create"),
+
+    # Settings
+    path("settings/alerts/", views.alert_settings, name="alert_settings"),
+    path("settings/alerts/test/", views.test_email_alert, name="test_email_alert"),
+
+    # User Management
+    path("users/", views.user_list, name="user_list"),
+    path("users/create/", views.user_create, name="user_create"),
+    path("users/<int:pk>/edit/", views.user_edit, name="user_edit"),
+    path("users/<int:pk>/delete/", views.user_delete, name="user_delete"),
 ]

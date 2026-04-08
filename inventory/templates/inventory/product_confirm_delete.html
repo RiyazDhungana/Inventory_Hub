@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="p-6 md:p-10 w-full max-w-2xl mx-auto overflow-x-hidden">
+  <div class="mb-8">
+    <a href="{% url 'product_list' %}" class="text-blue-600 hover:underline text-sm font-medium mb-4 inline-block">&larr; Back to Products</a>
+    <h1 class="text-3xl font-bold text-slate-800 tracking-tight">Confirm Deletion</h1>
+    <p class="text-slate-500 mt-1">Are you sure you want to delete this product?</p>
+  </div>
+
+  <div class="bg-white rounded-xl shadow-lg border border-red-100 p-8">
+    <div class="flex items-center gap-4 p-4 bg-red-50 text-red-700 rounded-lg mb-6 border border-red-100">
+      <span class="text-2xl">⚠️</span>
+      <div>
+        <h2 class="font-bold">Warning: Permanent Action</h2>
+        <p class="text-sm">Deleting <strong>{{ product_to_delete.name }}</strong> cannot be undone.</p>
+      </div>
+    </div>
+
+    <div class="space-y-4 mb-8">
+        <div class="flex gap-2">
+            <span class="text-slate-500 font-medium w-32">Product Name:</span>
+            <span class="text-slate-900 font-bold">{{ product_to_delete.name }}</span>
+        </div>
+        <div class="flex gap-2">
+            <span class="text-slate-500 font-medium w-32">Current Stock:</span>
+            <span class="text-slate-900 font-bold">{{ product_to_delete.stock_quantity }}</span>
+        </div>
+        <div class="flex gap-2">
+            <span class="text-slate-500 font-medium w-32">Unit Price:</span>
+            <span class="text-slate-900 font-bold">Rs {{ product_to_delete.selling_price }}</span>
+        </div>
+    </div>
+
+    <form method="post" class="flex gap-4">
+      {% csrf_token %}
+      <button type="submit" class="px-8 py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 shadow-md transition-all active:scale-95">
+        Yes, Delete Product
+      </button>
+      <a href="{% url 'product_list' %}" class="px-8 py-3 bg-slate-100 text-slate-700 font-bold rounded-lg hover:bg-slate-200 transition-all">
+        Cancel
+      </a>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -3,8 +3,8 @@
 <div class="p-6 md:p-10 w-full max-w-5xl mx-auto overflow-x-hidden">
   <div class="mb-8">
     <a href="{% url 'vendor_list' %}" class="text-blue-600 hover:underline text-sm font-medium mb-4 inline-block">&larr; Back to Vendors</a>
-    <h1 class="text-3xl font-bold text-slate-800 tracking-tight">Add Vendor</h1>
-    <p class="text-slate-500 mt-1">Register a new supplier to link to inventory purchases.</p>
+    <h1 class="text-3xl font-bold text-slate-800 tracking-tight">{% if is_edit %}Edit Vendor: {{ vendor.name }}{% else %}Add Vendor{% endif %}</h1>
+    <p class="text-slate-500 mt-1">{% if is_edit %}Update vendor contact details.{% else %}Register a new supplier to link to inventory purchases.{% endif %}</p>
   </div>
 
   <div class="bg-white rounded-xl shadow border border-slate-100 p-6 max-w-2xl">
@@ -25,7 +25,7 @@
 
       <div class="pt-4 flex gap-4">
         <button type="submit" class="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 shadow">
-          Save Vendor
+          {% if is_edit %}Update Vendor{% else %}Save Vendor{% endif %}
         </button>
         <a href="{% url 'vendor_list' %}" class="px-6 py-2 border border-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-50">
           Cancel

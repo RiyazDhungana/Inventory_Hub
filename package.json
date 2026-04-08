@@ -1,0 +1,28 @@
+{
+  "name": "inventory_hub",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "concurrently": "^8.0.0",
+  "scripts": {
+    "dev": "concurrently \"npx tailwindcss -i ./static/css/styles.css -o ./static/css/output.css --watch\" \"start http://127.0.0.1:8000/ & python manage.py runserver\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RiyazDhungana/Inventory_Hub.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/RiyazDhungana/Inventory_Hub/issues"
+  },
+  "homepage": "https://github.com/RiyazDhungana/Inventory_Hub#readme",
+  "devDependencies": {
+    "autoprefixer": "^10.4.27",
+    "concurrently": "^9.2.1",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.3.3"
+  }
+}

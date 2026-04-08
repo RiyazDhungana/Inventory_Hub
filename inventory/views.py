@@ -1,8 +1,10 @@
 import json
+import threading
 from decimal import Decimal, InvalidOperation
 from django.shortcuts import render, redirect
-from django.contrib.auth import logout
-from django.contrib.auth.decorators import login_required, permission_required
+from django.contrib.auth import logout, update_session_auth_hash
+from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
+from django.contrib.auth.models import User, Group
 from django.db.models import F, Sum, DecimalField, ExpressionWrapper, Count
 from django.db.models.functions import TruncDate
 from django.core.exceptions import ValidationError
@@ -10,8 +12,10 @@ from django.db import transaction
 from django.utils.timezone import now
 from datetime import timedelta, datetime, date
 
-from .models import Product, Sale, SaleItem, Vendor, Purchase, PurchaseItem, StockAdjustment
-from .forms import VendorForm, PurchaseForm, PurchaseItemForm, StockAdjustmentForm, ProductForm
+from .models import Product, Sale, SaleItem, Vendor, Purchase, PurchaseItem, StockAdjustment, AlertSettings
+from .forms import VendorForm, PurchaseForm, PurchaseItemForm, StockAdjustmentForm, ProductForm, AlertSettingsForm, AppUserCreationForm, AppUserUpdateForm
+from .utils_auth import setup_user_groups
+from django.contrib import messages
 # =========================
 # DASHBOARD (post-login)
 # =========================
@@ -57,7 +61,7 @@ def dashboard(request):
         .annotate(
             date=TruncDate("sale__sale_date"),
             item_profit=ExpressionWrapper(
-                F("total_price") - F("quantity") * F("product__cost_price"),
+                F("total_price") - F("cost_at_sale"),
                 output_field=DecimalField(),
             ),
         )
@@ -210,14 +214,14 @@ def profit_report(request):
     end_date = date_to or now().date()
 
     daily = (
-        SaleItem.objects.filter(
+        qs.filter(
             sale__sale_date__date__gte=start_date,
             sale__sale_date__date__lte=end_date,
         )
         .annotate(
             date=TruncDate("sale__sale_date"),
             item_profit=ExpressionWrapper(
-                F("total_price") - F("quantity") * F("product__cost_price"),
+                F("total_price") - F("cost_at_sale"),
                 output_field=DecimalField(),
             ),
         )
@@ -324,7 +328,15 @@ def low_stock_alerts(request):
     elif status == "low":
         base_qs = base_qs.filter(stock_quantity__gt=0)
 
-    products = base_qs.order_by("stock_quantity", "name")
+    from django.db.models import Prefetch
+    from .models import PurchaseItem
+
+    # Only get batches that have stock, ordered by expiry
+    active_batches = PurchaseItem.objects.filter(current_stock__gt=0).order_by('expiry_date')
+    
+    products = base_qs.prefetch_related(
+        Prefetch('purchase_items', queryset=active_batches, to_attr='active_batches')
+    ).order_by("stock_quantity", "name")
 
     # Summary counts
     total_low = Product.objects.filter(stock_quantity__lte=F("minimum_stock")).count()
@@ -362,10 +374,10 @@ def expiry_report(request):
     today = date.today()
     thirty_days = today + timedelta(days=30)
     
-    # Get purchase items that have an expiry date, and the product is in stock
+    # Get purchase items that have an expiry date, and still have stock in that specific batch
     records = PurchaseItem.objects.filter(
         expiry_date__isnull=False,
-        product__stock_quantity__gt=0
+        current_stock__gt=0
     ).select_related("product", "purchase__vendor").order_by("expiry_date")
 
     expired = []
@@ -724,6 +736,38 @@ def vendor_create(request):
         form = VendorForm()
     return render(request, "inventory/vendor_form.html", {"form": form})
 
+@login_required
+@permission_required("inventory.change_vendor", raise_exception=True)
+def vendor_edit(request, pk):
+    vendor = Vendor.objects.get(pk=pk)
+    if request.method == "POST":
+        form = VendorForm(request.POST, instance=vendor)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Vendor {vendor.name} updated.")
+            return redirect("vendor_list")
+    else:
+        form = VendorForm(instance=vendor)
+    return render(request, "inventory/vendor_form.html", {"form": form, "is_edit": True, "vendor": vendor})
+
+@login_required
+@permission_required("inventory.delete_vendor", raise_exception=True)
+def vendor_delete(request, pk):
+    vendor = Vendor.objects.get(pk=pk)
+    
+    # Check for existing purchases
+    if Purchase.objects.filter(vendor=vendor).exists():
+        messages.error(request, f"Cannot delete vendor '{vendor.name}' because there are existing purchases linked to it.")
+        return redirect("vendor_list")
+        
+    if request.method == "POST":
+        name = vendor.name
+        vendor.delete()
+        messages.success(request, f"Vendor {name} deleted.")
+        return redirect("vendor_list")
+        
+    return render(request, "inventory/vendor_confirm_delete.html", {"vendor_to_delete": vendor})
+
 # =========================
 # PRODUCTS
 # =========================
@@ -780,7 +824,7 @@ def product_create(request):
                         minimum_stock=min_stock,
                         shelf_life_days=shelf
                     )
-                    prod.save(skip_stock_validation=True)
+                    prod.save()
                     created_count += 1
                 
                 if created_count == 0:
@@ -795,6 +839,41 @@ def product_create(request):
             return render(request, "inventory/product_form.html", {"form_error": str(e)})
 
     return render(request, "inventory/product_form.html")
+
+@login_required
+@permission_required("inventory.change_product", raise_exception=True)
+def product_edit(request, pk):
+    product = Product.objects.get(pk=pk)
+    if request.method == "POST":
+        form = ProductForm(request.POST, instance=product)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Product {product.name} updated.")
+            return redirect("product_list")
+    else:
+        form = ProductForm(instance=product)
+    return render(request, "inventory/product_edit.html", {"form": form, "is_edit": True, "product": product})
+
+@login_required
+@permission_required("inventory.delete_product", raise_exception=True)
+def product_delete(request, pk):
+    product = Product.objects.get(pk=pk)
+    
+    # Check for existing transactions
+    from .models import SaleItem, PurchaseItem
+    has_transactions = SaleItem.objects.filter(product=product).exists() or PurchaseItem.objects.filter(product=product).exists()
+    
+    if has_transactions:
+        messages.error(request, f"Cannot delete product '{product.name}' because there are existing sales or purchases linked to it.")
+        return redirect("product_list")
+        
+    if request.method == "POST":
+        name = product.name
+        product.delete()
+        messages.success(request, f"Product {name} deleted.")
+        return redirect("product_list")
+        
+    return render(request, "inventory/product_confirm_delete.html", {"product_to_delete": product})
 
 # =========================
 # PURCHASES
@@ -848,6 +927,7 @@ def purchase_create(request):
                 cost_prices = request.POST.getlist("cost_price")
                 mfg_dates = request.POST.getlist("manufacture_date")
                 exp_dates = request.POST.getlist("expiry_date")
+                batch_numbers = request.POST.getlist("batch_number")
 
                 line_items = []
                 for idx in range(len(product_ids)):
@@ -856,6 +936,7 @@ def purchase_create(request):
                     cost_str = cost_prices[idx]
                     mfg_str = mfg_dates[idx] if idx < len(mfg_dates) else ""
                     exp_str = exp_dates[idx] if idx < len(exp_dates) else ""
+                    batch_num = batch_numbers[idx] if idx < len(batch_numbers) else ""
 
                     if not pid or not qty_str or not cost_str:
                         continue
@@ -877,7 +958,8 @@ def purchase_create(request):
                         "quantity": qty,
                         "cost": cost,
                         "mfg": mfg_dt,
-                        "exp": exp_dt
+                        "exp": exp_dt,
+                        "batch": batch_num
                     })
 
                 if not line_items:
@@ -893,7 +975,8 @@ def purchase_create(request):
                         quantity=item["quantity"],
                         cost_price=item["cost"],
                         manufacture_date=item["mfg"],
-                        expiry_date=item["exp"]
+                        expiry_date=item["exp"],
+                        batch_number=item["batch"]
                     )
 
             return redirect("purchase_list")
@@ -935,3 +1018,131 @@ def stock_adjustment_create(request):
         form = StockAdjustmentForm()
     
     return render(request, "inventory/stock_adjustment_form.html", {"form": form})
+@login_required
+@permission_required('inventory.change_alertsettings', raise_exception=True)
+def alert_settings(request):
+    settings_obj = AlertSettings.get_settings()
+    if request.method == "POST":
+        form = AlertSettingsForm(request.POST, instance=settings_obj)
+        if form.is_valid():
+            form.save()
+            
+            # Reschedule the background job
+            try:
+                from inventory import scheduler
+                scheduler.start() # This calls scheduler.start() which has replace_existing=True
+                messages.success(request, "Alert settings updated and scheduler restarted.")
+            except Exception as e:
+                messages.error(request, f"Settings saved but scheduler failed to restart: {e}")
+                
+            return redirect('alert_settings')
+    else:
+        form = AlertSettingsForm(instance=settings_obj)
+    
+    return render(request, 'inventory/alert_settings.html', {
+        'form': form,
+        'settings': settings_obj
+    })
+
+@login_required
+@permission_required('inventory.change_alertsettings', raise_exception=True)
+def test_email_alert(request):
+    from inventory.cron import check_stock_and_expiry
+    
+    # Send email in background so the user doesn't wait for 2-3 mins 
+    thread = threading.Thread(target=check_stock_and_expiry)
+    thread.start()
+    
+    messages.success(request, "Test alert triggered in the background! You should receive it shortly without the page waiting.")
+    return redirect('alert_settings')
+
+
+# =========================
+# USER MANAGEMENT (ADMIN ONLY)
+# =========================
+
+@login_required
+@user_passes_test(lambda u: u.is_superuser)
+def user_list(request):
+    users = User.objects.all().order_by('-is_superuser', 'username')
+    return render(request, "inventory/user_list.html", {"users": users})
+
+@login_required
+@user_passes_test(lambda u: u.is_superuser)
+def user_create(request):
+    # Ensure groups exist
+    setup_user_groups()
+    
+    if request.method == "POST":
+        form = AppUserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            role = form.cleaned_data.get("role")
+            
+            # Assign to group
+            group = Group.objects.get(name=role)
+            user.groups.add(group)
+            
+            # Also set is_staff for both Staff and Manager
+            user.is_staff = True
+            user.save()
+            
+            messages.success(request, f"User {user.username} created successfully as {role}.")
+            return redirect("user_list")
+    else:
+        form = AppUserCreationForm()
+        
+    return render(request, "inventory/user_form.html", {"form": form})
+
+@login_required
+@user_passes_test(lambda u: u.is_superuser)
+def user_edit(request, pk):
+    user = User.objects.get(pk=pk)
+    if request.method == "POST":
+        form = AppUserUpdateForm(request.POST, instance=user)
+        if form.is_valid():
+            user = form.save()
+            role = form.cleaned_data.get("role")
+            new_password = form.cleaned_data.get("new_password")
+            
+            # Update role group
+            user.groups.clear()
+            group = Group.objects.get(name=role)
+            user.groups.add(group)
+
+            # Handle password change
+            if new_password:
+                user.set_password(new_password)
+                user.save()
+                # If editing yourself, keep the session valid
+                if user == request.user:
+                    update_session_auth_hash(request, user)
+            
+            messages.success(request, f"User {user.username} updated successfully.")
+            return redirect("user_list")
+    else:
+        form = AppUserUpdateForm(instance=user)
+    
+    return render(request, "inventory/user_form.html", {
+        "form": form,
+        "is_edit": True,
+        "edit_user": user
+    })
+
+@login_required
+@user_passes_test(lambda u: u.is_superuser)
+def user_delete(request, pk):
+    user = User.objects.get(pk=pk)
+    
+    # Prevent self-deletion
+    if user == request.user:
+        messages.error(request, "You cannot delete your own account.")
+        return redirect("user_list")
+        
+    if request.method == "POST":
+        username = user.username
+        user.delete()
+        messages.success(request, f"User {username} deleted successfully.")
+        return redirect("user_list")
+        
+    return render(request, "inventory/user_confirm_delete.html", {"user_to_delete": user})

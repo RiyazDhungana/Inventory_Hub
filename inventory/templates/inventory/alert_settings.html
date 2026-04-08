@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+
+{% block title %}Email Alert Settings - Inventory Hub{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="mb-8 flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-slate-800">Email Alert Settings</h1>
+            <p class="text-slate-500 mt-1">Configure automated notifications for low stock and expiring products.</p>
+        </div>
+        <div class="bg-blue-50 px-4 py-2 rounded-full border border-blue-100 flex items-center">
+            <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse mr-2"></div>
+            <span class="text-sm font-medium text-blue-700">Scheduler Active</span>
+        </div>
+    </div>
+
+    {% if messages %}
+    <div class="mb-6">
+        {% for message in messages %}
+        <div class="px-4 py-3 rounded-lg {% if message.tags == 'success' %}bg-emerald-50 text-emerald-700 border border-emerald-100{% else %}bg-rose-50 text-rose-700 border border-rose-100{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <form method="post" class="p-8">
+            {% csrf_token %}
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Recipient Emails -->
+                <div class="md:col-span-2">
+                    <label for="{{ form.recipient_emails.id_for_label }}" class="block text-sm font-semibold text-slate-700 mb-2">
+                        Recipient Email Addresses
+                    </label>
+                    {{ form.recipient_emails }}
+                    <p class="mt-2 text-xs text-slate-400 italic">Separate multiple emails with commas (e.g., alex@hub.com, sarah@hub.com)</p>
+                    {% if form.recipient_emails.errors %}
+                    <p class="text-rose-500 text-xs mt-1">{{ form.recipient_emails.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Schedule Time -->
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-700 mb-4 flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Schedule Time (Nepal Time)
+                    </h3>
+                    <div class="flex items-center space-x-3">
+                        <div class="flex-1">
+                            <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1">Hour (24h)</label>
+                            {{ form.alert_hour }}
+                        </div>
+                        <div class="text-2xl font-bold text-slate-300 mt-4">:</div>
+                        <div class="flex-1">
+                            <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1">Minute</label>
+                            {{ form.alert_minute }}
+                        </div>
+                    </div>
+                    {% if form.alert_hour.errors or form.alert_minute.errors %}
+                    <p class="text-rose-500 text-xs mt-1">Please enter a valid time.</p>
+                    {% endif %}
+                </div>
+
+                <!-- Feature Toggles -->
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-700 mb-4 flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Active Notifications
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                            <div>
+                                <span class="block text-sm font-medium text-slate-700">Low Stock Alerts</span>
+                                <span class="text-xs text-slate-400">Products below minimum threshold</span>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                {{ form.low_stock_enabled }}
+                            </label>
+                        </div>
+                        
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                            <div>
+                                <span class="block text-sm font-medium text-slate-700">Expiry Alerts</span>
+                                <span class="text-xs text-slate-400">Items expiring within 7 days</span>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                {{ form.expiry_enabled }}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-10 pt-6 border-t border-slate-100 flex justify-between items-center">
+                <a href="{% url 'test_email_alert' %}" class="px-5 py-2.5 text-blue-600 font-semibold rounded-xl border border-blue-200 hover:bg-blue-50 transition-all active:scale-95 flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002 2H5a2 2 0 00-2-2V7a2 2 0 002-2h14a2 2 0 002 2v10a2 2 0 00-2 2z"></path>
+                    </svg>
+                    Send Test Email Now
+                </a>
+                <button type="submit" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all shadow-md active:scale-95">
+                    Save Configuration
+                </button>
+            </div>
+        </form>
+    </div>
+    
+    <div class="mt-6 bg-amber-50 rounded-xl p-4 border border-amber-100 flex gap-4">
+        <svg class="w-6 h-6 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <div class="text-sm text-amber-800">
+            <strong>Note:</strong> Changes to the schedule take effect immediately. The system will precisely trigger the next email at <span class="font-mono bg-amber-100 px-1 rounded">{{ settings.alert_hour|stringformat:"02d" }}:{{ settings.alert_minute|stringformat:"02d" }}</span> NPT.
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Styling for the checkbox-as-toggle if desired, but default is fine for now */
+    input[type="checkbox"] {
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
