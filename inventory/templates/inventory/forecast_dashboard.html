@@ -1,0 +1,83 @@
+{% extends 'base.html' %} {% block content %}
+<div class="p-6 md:p-10 w-full max-w-6xl mx-auto overflow-x-hidden">
+  <div
+    class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4"
+  >
+    <div>
+      <h1 class="text-3xl font-bold text-slate-800 tracking-tight">
+        Demand Forecasting
+      </h1>
+      <p class="text-slate-500 mt-1">
+        Predicting future stock needs based on 6 months of historical trends.
+      </p>
+    </div>
+    <div class="flex gap-3">
+      <div
+        class="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-semibold border border-blue-100 flex items-center gap-2"
+      >
+        <span>📅</span> 30-Day Outlook
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% for item in forecast_products %}
+    <div
+      class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hover:shadow-md transition-all group"
+    >
+      <div class="flex items-start justify-between mb-4">
+        <div
+          class="w-12 h-12 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center text-xl shadow-inner"
+        >
+          📦
+        </div>
+        <a
+          href="{% url 'product_forecast_detail' item.product__id %}"
+          class="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-full hover:bg-blue-600 hover:text-white transition-colors"
+        >
+          View Forecast &rarr;
+        </a>
+      </div>
+      <h3 class="text-lg font-bold text-slate-800 truncate">
+        {{ item.product__name }}
+      </h3>
+      <p class="text-sm text-slate-500 mt-1 mb-4 italic">
+        Automated Prophet Analysis Active
+      </p>
+
+      <div
+        class="pt-4 border-t border-slate-100 flex items-center justify-between"
+      >
+        <span
+          class="text-xs font-semibold text-slate-400 uppercase tracking-wider"
+          >Status</span
+        >
+        <span
+          class="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-100"
+          >Healthy Data</span
+        >
+      </div>
+    </div>
+    {% empty %}
+    <div
+      class="col-span-full py-20 text-center bg-white rounded-2xl border-2 border-dashed border-slate-200"
+    >
+      <div class="text-4xl mb-4">📉</div>
+      <h3 class="text-xl font-bold text-slate-800">
+        No Forecasts Generated Yet
+      </h3>
+      <p class="text-slate-500 mt-2 max-w-md mx-auto">
+        Forecasts are automatically generated every day at 1 AM. You can also
+        trigger them by visiting a specific product's detail page.
+      </p>
+      <a
+        href="{% url 'product_list' %}"
+        class="mt-6 inline-block px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md"
+      >
+        Go to Product List
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

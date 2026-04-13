@@ -1,7 +1,12 @@
+import csv
 import json
+import subprocess
 import threading
+import sys
 from decimal import Decimal, InvalidOperation
-from django.shortcuts import render, redirect
+from pathlib import Path
+from django.shortcuts import render, redirect, get_object_or_404
+from django.conf import settings
 from django.contrib.auth import logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
 from django.contrib.auth.models import User, Group
@@ -12,8 +17,8 @@ from django.db import transaction
 from django.utils.timezone import now
 from datetime import timedelta, datetime, date
 
-from .models import Product, Sale, SaleItem, Vendor, Purchase, PurchaseItem, StockAdjustment, AlertSettings
-from .forms import VendorForm, PurchaseForm, PurchaseItemForm, StockAdjustmentForm, ProductForm, AlertSettingsForm, AppUserCreationForm, AppUserUpdateForm
+from .models import Product, Sale, SaleItem, Vendor, Purchase, PurchaseItem, StockAdjustment, AlertSettings, DemandForecast
+from .forms import VendorForm, PurchaseForm, PurchaseItemForm, StockAdjustmentForm, ProductForm, ProductEditForm, AlertSettingsForm, AppUserCreationForm, AppUserUpdateForm
 from .utils_auth import setup_user_groups
 from django.contrib import messages
 # =========================
@@ -628,7 +633,21 @@ def sale_list(request):
 @login_required
 @permission_required("inventory.add_sale", raise_exception=True)
 def create_sale(request):
-    products = Product.objects.all()
+    products = Product.objects.all().order_by("name")
+
+    available_stock_map = {}
+    for product in products:
+        batch_stock = (
+            product.purchase_items.filter(current_stock__gt=0).aggregate(total=Sum("current_stock"))["total"] or 0
+        )
+        # If legacy products have opening stock but no batches, allow sales from global stock.
+        effective_stock = batch_stock if batch_stock > 0 else product.stock_quantity
+        available_stock_map[product.id] = effective_stock
+        product.available_stock = effective_stock
+        product.batch_stock = batch_stock
+        product.is_available_for_sale = effective_stock > 0
+
+    has_available_products = any(p.is_available_for_sale for p in products)
 
     if request.method == "POST":
         try:
@@ -673,14 +692,17 @@ def create_sale(request):
                 )
 
                 for pid, qty in line_items:
-                    product = Product.objects.get(id=pid)
+                    product = Product.objects.filter(id=pid).first()
+                    if not product:
+                        raise ValidationError("One or more selected products are invalid.")
                     SaleItem.objects.create(
                         sale=sale,
                         product=product,
                         quantity=qty,
                     )
-
-            return redirect("sale_success")
+                
+                messages.success(request, f"Sale recorded successfully with {len(line_items)} item(s)!")
+            return redirect("sale_list")
 
         except ValidationError as e:
             # Handle both field and non-field validation errors
@@ -694,26 +716,29 @@ def create_sale(request):
 
             return render(request, "inventory/create_sale.html", {
                 "products": products,
+                "available_stock_map": available_stock_map,
+                "has_available_products": has_available_products,
                 "form_error": message,
             })
 
         except Exception as e:
             return render(request, "inventory/create_sale.html", {
                 "products": products,
+                "available_stock_map": available_stock_map,
+                "has_available_products": has_available_products,
                 "form_error": str(e)
             })
 
     return render(request, "inventory/create_sale.html", {
-        "products": products
+        "products": products,
+        "available_stock_map": available_stock_map,
+        "has_available_products": has_available_products,
     })
 
 
 # =========================
 # SALE SUCCESS
 # =========================
-@login_required
-def sale_success(request):
-    return render(request, "inventory/sale_success.html")
 
 # =========================
 # VENDORS
@@ -730,7 +755,8 @@ def vendor_create(request):
     if request.method == "POST":
         form = VendorForm(request.POST)
         if form.is_valid():
-            form.save()
+            vendor = form.save()
+            messages.success(request, f"Vendor '{vendor.name}' created successfully!")
             return redirect("vendor_list")
     else:
         form = VendorForm()
@@ -739,7 +765,7 @@ def vendor_create(request):
 @login_required
 @permission_required("inventory.change_vendor", raise_exception=True)
 def vendor_edit(request, pk):
-    vendor = Vendor.objects.get(pk=pk)
+    vendor = get_object_or_404(Vendor, pk=pk)
     if request.method == "POST":
         form = VendorForm(request.POST, instance=vendor)
         if form.is_valid():
@@ -753,7 +779,7 @@ def vendor_edit(request, pk):
 @login_required
 @permission_required("inventory.delete_vendor", raise_exception=True)
 def vendor_delete(request, pk):
-    vendor = Vendor.objects.get(pk=pk)
+    vendor = get_object_or_404(Vendor, pk=pk)
     
     # Check for existing purchases
     if Purchase.objects.filter(vendor=vendor).exists():
@@ -784,6 +810,7 @@ def product_create(request):
         try:
             with transaction.atomic():
                 names = request.POST.getlist("name")
+                skus = request.POST.getlist("sku")
                 descriptions = request.POST.getlist("description")
                 cost_prices = request.POST.getlist("cost_price")
                 selling_prices = request.POST.getlist("selling_price")
@@ -798,6 +825,7 @@ def product_create(request):
                     if not name:
                         continue # Skip empty rows
 
+                    sku = skus[idx].strip() if idx < len(skus) else ""
                     desc = descriptions[idx].strip() if idx < len(descriptions) else ""
                     
                     try:
@@ -817,6 +845,7 @@ def product_create(request):
 
                     prod = Product(
                         name=name,
+                        sku=sku if sku else None,
                         description=desc,
                         cost_price=cost,
                         selling_price=sell,
@@ -829,7 +858,8 @@ def product_create(request):
                 
                 if created_count == 0:
                     raise ValidationError("Please enter at least one valid product name.")
-
+                
+                messages.success(request, f"Successfully created {created_count} product{'s' if created_count != 1 else ''}!")
             return redirect("product_list")
 
         except ValidationError as e:
@@ -843,21 +873,24 @@ def product_create(request):
 @login_required
 @permission_required("inventory.change_product", raise_exception=True)
 def product_edit(request, pk):
-    product = Product.objects.get(pk=pk)
+    product = get_object_or_404(Product, pk=pk)
     if request.method == "POST":
-        form = ProductForm(request.POST, instance=product)
+        form = ProductEditForm(request.POST, instance=product)
         if form.is_valid():
             form.save()
             messages.success(request, f"Product {product.name} updated.")
             return redirect("product_list")
+        else:
+            # Form has errors, render with errors visible
+            return render(request, "inventory/product_edit.html", {"form": form, "is_edit": True, "product": product, "has_errors": True})
     else:
-        form = ProductForm(instance=product)
+        form = ProductEditForm(instance=product)
     return render(request, "inventory/product_edit.html", {"form": form, "is_edit": True, "product": product})
 
 @login_required
 @permission_required("inventory.delete_product", raise_exception=True)
 def product_delete(request, pk):
-    product = Product.objects.get(pk=pk)
+    product = get_object_or_404(Product, pk=pk)
     
     # Check for existing transactions
     from .models import SaleItem, PurchaseItem
@@ -920,7 +953,9 @@ def purchase_create(request):
                 if not vendor_id:
                     raise ValidationError("Please select a vendor.")
                 
-                vendor = Vendor.objects.get(id=vendor_id)
+                vendor = Vendor.objects.filter(id=vendor_id).first()
+                if not vendor:
+                    raise ValidationError("Selected vendor does not exist.")
 
                 product_ids = request.POST.getlist("product")
                 quantities = request.POST.getlist("quantity")
@@ -968,7 +1003,9 @@ def purchase_create(request):
                 purchase = Purchase.objects.create(vendor=vendor, user=request.user)
 
                 for item in line_items:
-                    product = Product.objects.get(id=item["product_id"])
+                    product = Product.objects.filter(id=item["product_id"]).first()
+                    if not product:
+                        raise ValidationError("One or more selected products are invalid.")
                     PurchaseItem.objects.create(
                         purchase=purchase,
                         product=product,
@@ -978,7 +1015,8 @@ def purchase_create(request):
                         expiry_date=item["exp"],
                         batch_number=item["batch"]
                     )
-
+                
+                messages.success(request, f"Purchase created successfully with {len(line_items)} item(s)!")
             return redirect("purchase_list")
 
         except ValidationError as e:
@@ -1011,6 +1049,7 @@ def stock_adjustment_create(request):
                 adjustment = form.save(commit=False)
                 adjustment.user = request.user
                 adjustment.save() # model logic validates/updates stock
+                messages.success(request, f"Stock adjustment recorded successfully!")
                 return redirect("stock_adjustment_list")
             except ValidationError as e:
                 form.add_error(None, e)
@@ -1050,7 +1089,7 @@ def test_email_alert(request):
     from inventory.cron import check_stock_and_expiry
     
     # Send email in background so the user doesn't wait for 2-3 mins 
-    thread = threading.Thread(target=check_stock_and_expiry)
+    thread = threading.Thread(target=check_stock_and_expiry, daemon=True)
     thread.start()
     
     messages.success(request, "Test alert triggered in the background! You should receive it shortly without the page waiting.")
@@ -1097,7 +1136,7 @@ def user_create(request):
 @login_required
 @user_passes_test(lambda u: u.is_superuser)
 def user_edit(request, pk):
-    user = User.objects.get(pk=pk)
+    user = get_object_or_404(User, pk=pk)
     if request.method == "POST":
         form = AppUserUpdateForm(request.POST, instance=user)
         if form.is_valid():
@@ -1132,7 +1171,7 @@ def user_edit(request, pk):
 @login_required
 @user_passes_test(lambda u: u.is_superuser)
 def user_delete(request, pk):
-    user = User.objects.get(pk=pk)
+    user = get_object_or_404(User, pk=pk)
     
     # Prevent self-deletion
     if user == request.user:
@@ -1146,3 +1185,213 @@ def user_delete(request, pk):
         return redirect("user_list")
         
     return render(request, "inventory/user_confirm_delete.html", {"user_to_delete": user})
+
+
+# =========================
+# FORECASTING VIEWS
+# =========================
+
+@login_required
+@permission_required("inventory.view_product", raise_exception=True)
+def forecast_dashboard(request):
+    """
+    Overview of all products that have an active forecast.
+    """
+    forecasts = DemandForecast.objects.select_related("product").values(
+        "product__id", "product__name"
+    ).distinct()
+    
+    return render(request, "inventory/forecast_dashboard.html", {
+        "forecast_products": forecasts
+    })
+
+@login_required
+@permission_required("inventory.view_product", raise_exception=True)
+def product_forecast_detail(request, pk):
+    """
+    Detailed forecast view for a single product with Plotly chart data.
+    """
+    product = get_object_or_404(Product, pk=pk)
+    forecast_qs = DemandForecast.objects.filter(product=product).order_by("date")
+
+    if request.method == "POST":
+        def _generate_forecast():
+            from .forecasting import run_forecast_for_product, ingest_excel_history
+            excel_path = Path(settings.BASE_DIR) / "Online Retail.xlsx"
+            excel_df = ingest_excel_history(excel_path) if excel_path.exists() else None
+            run_forecast_for_product(product.id, excel_df)
+
+        generation_thread = threading.Thread(target=_generate_forecast, daemon=True)
+        generation_thread.start()
+        messages.success(request, f"Forecast generation started for {product.name}. Refresh in a moment to see the result.")
+        return redirect("product_forecast_detail", pk=product.pk)
+
+    # Historical data for the chart (last 30 days)
+    history_cutoff = now() - timedelta(days=60)
+    history_qs = SaleItem.objects.filter(
+        product=product, 
+        sale__sale_date__gte=history_cutoff
+    ).values("sale__sale_date").annotate(qty=Sum("quantity")).order_by("sale__sale_date")
+
+    # Map to JSON for Plotly
+    hist_x = [h["sale__sale_date"].strftime("%Y-%m-%d") for h in history_qs]
+    hist_y = [h["qty"] for h in history_qs]
+
+    forecast_ready = forecast_qs.exists()
+    forecast_rows = list(forecast_qs) if forecast_ready else []
+
+    display_dates = [f.date for f in forecast_rows]
+    if display_dates:
+        latest_forecast_date = max(display_dates)
+        today_date = now().date()
+        if (today_date - latest_forecast_date).days > 30:
+            shift_days = (today_date - latest_forecast_date).days
+            display_dates = [d + timedelta(days=shift_days) for d in display_dates]
+
+    fore_x = [d.strftime("%Y-%m-%d") for d in display_dates]
+    fore_y = [float(f.predicted_quantity) for f in forecast_rows]
+    fore_y_upper = [float(f.upper_bound) for f in forecast_rows]
+    fore_y_lower = [float(f.lower_bound) for f in forecast_rows]
+
+    weekly_breakdown = []
+    for week_no in range(1, 5):
+        start_idx = (week_no - 1) * 7
+        end_idx = start_idx + 7
+        week_rows = forecast_rows[start_idx:end_idx]
+
+        if week_rows:
+            week_total = sum(float(row.predicted_quantity) for row in week_rows)
+            start_date = display_dates[start_idx].strftime("%b %d")
+            end_date = display_dates[min(end_idx, len(display_dates)) - 1].strftime("%b %d")
+        else:
+            week_total = 0.0
+            start_date = "-"
+            end_date = "-"
+
+        weekly_breakdown.append(
+            {
+                "label": f"Week {week_no}",
+                "total": week_total,
+                "range": f"{start_date} - {end_date}",
+            }
+        )
+
+    month_rows = forecast_rows[:30]
+    month_total = sum(float(row.predicted_quantity) for row in month_rows) if month_rows else 0.0
+    month_range = (
+        f"{display_dates[0].strftime('%b %d')} - {display_dates[min(len(display_dates), 30) - 1].strftime('%b %d')}"
+        if month_rows
+        else "-"
+    )
+
+    # Smart Reorder Suggestion
+    reorder_quantity = int(month_total - product.stock_quantity)
+    if reorder_quantity <= 0:
+        reorder_status = "good"
+        reorder_message = "You're well-stocked! No reorder needed."
+    else:
+        reorder_status = "action_needed"
+        reorder_message = f"Suggested reorder: {reorder_quantity} units"
+
+    context = {
+        "product": product,
+        "hist_x": json.dumps(hist_x),
+        "hist_y": json.dumps(hist_y),
+        "fore_x": json.dumps(fore_x),
+        "fore_y": json.dumps(fore_y),
+        "fore_y_upper": json.dumps(fore_y_upper),
+        "fore_y_lower": json.dumps(fore_y_lower),
+        "forecast_ready": forecast_ready,
+        "forecast_count": len(forecast_rows),
+        "weekly_breakdown": weekly_breakdown,
+        "month_total": month_total,
+        "month_range": month_range,
+        "reorder_quantity": reorder_quantity,
+        "reorder_status": reorder_status,
+        "reorder_message": reorder_message,
+    }
+    
+    return render(request, "inventory/forecast_detail.html", context)
+
+
+@login_required
+@permission_required("inventory.view_product", raise_exception=True)
+def forecast_accuracy_report(request):
+    messages.info(request, "Model accuracy report is hidden for this demo build.")
+    return redirect("forecast_dashboard")
+
+    report_path = Path(settings.BASE_DIR) / "presentation_artifacts" / "accuracy_report.csv"
+
+    if request.method == "POST":
+        script_path = Path(settings.BASE_DIR) / "prophet_presentation_accuracy.py"
+        if not script_path.exists():
+            messages.error(request, "Accuracy generator script was not found.")
+        else:
+            completed = subprocess.run(
+                [sys.executable, str(script_path)],
+                cwd=str(settings.BASE_DIR),
+                capture_output=True,
+                text=True,
+            )
+            if completed.returncode == 0:
+                messages.success(request, "Forecast accuracy report generated successfully.")
+            else:
+                messages.error(request, completed.stderr.strip() or "Failed to generate the accuracy report.")
+
+        return redirect("forecast_accuracy_report")
+
+    rows = []
+
+    if report_path.exists():
+        with report_path.open(newline="", encoding="utf-8") as report_file:
+            reader = csv.DictReader(report_file)
+            for row in reader:
+                try:
+                    mape_value = row.get("mape_percent", "")
+                    rows.append(
+                        {
+                            "sku": (row.get("sku") or "").strip(),
+                            "product_name": (row.get("product_name") or "").strip(),
+                            "points_compared": int(float(row.get("points_compared") or 0)),
+                            "mae": float(row.get("mae") or 0),
+                            "rmse": float(row.get("rmse") or 0),
+                            "mape_percent": float(mape_value) if mape_value not in ("", None) else None,
+                        }
+                    )
+                except (TypeError, ValueError):
+                    continue
+
+    for row in rows:
+        row["mape_has_value"] = row["mape_percent"] is not None
+        row["mape_display"] = f"{row['mape_percent']:.2f}%" if row["mape_has_value"] else "N/A"
+
+    rows.sort(key=lambda item: (item["mape_percent"] is None, item["mape_percent"] or 0))
+
+    total_models = len(rows)
+    average_mae = round(sum(row["mae"] for row in rows) / total_models, 2) if rows else None
+    average_rmse = round(sum(row["rmse"] for row in rows) / total_models, 2) if rows else None
+    valid_mape_rows = [row for row in rows if row["mape_percent"] is not None]
+    average_mape = round(sum(row["mape_percent"] for row in valid_mape_rows) / len(valid_mape_rows), 2) if valid_mape_rows else None
+
+    average_mae_display = f"{average_mae:.2f}" if average_mae is not None else "N/A"
+    average_rmse_display = f"{average_rmse:.2f}" if average_rmse is not None else "N/A"
+    average_mape_display = f"{average_mape:.2f}%" if average_mape is not None else "N/A"
+
+    context = {
+        "report_available": report_path.exists(),
+        "report_path": str(report_path),
+        "rows": rows,
+        "total_models": total_models,
+        "average_mae": average_mae,
+        "average_rmse": average_rmse,
+        "average_mape": average_mape,
+        "average_mae_display": average_mae_display,
+        "average_rmse_display": average_rmse_display,
+        "average_mape_display": average_mape_display,
+        "best_row": rows[0] if rows else None,
+        "worst_row": rows[-1] if rows else None,
+        "chart_labels": json.dumps([f"{row['sku']} - {row['product_name']}" for row in rows]),
+        "chart_mape": json.dumps([row["mape_percent"] or 0 for row in rows]),
+    }
+
+    return render(request, "inventory/forecast_accuracy_report.html", context)

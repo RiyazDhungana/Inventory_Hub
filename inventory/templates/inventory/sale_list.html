@@ -1,5 +1,16 @@
 {% extends 'base.html' %}
 {% block content %}
+<style>
+  .table-row-fixed {
+    height: 4rem; /* Fixed height for consistent rows */
+  }
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>
 <div class="p-6 md:p-10 w-full overflow-x-hidden">
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
     <div>
@@ -44,19 +55,21 @@
       </thead>
       <tbody class="divide-y divide-slate-200">
         {% for sale in sales %}
-        <tr class="hover:bg-slate-50 transition">
-          <td class="px-6 py-4 text-sm font-medium text-slate-900">{{ sale.id }}</td>
-          <td class="px-6 py-4 text-sm text-slate-600">{{ sale.sale_date|date:"M d, Y, h:i A" }}</td>
-          <td class="px-6 py-4 text-sm text-slate-600">{{ sale.user.username }}</td>
-          <td class="px-6 py-4 text-sm text-slate-600">
-            {% for item in sale.items.all %}
-              {{ item.quantity }}x {{ item.product.name }}{% if not forloop.last %}, {% endif %}
-            {% endfor %}
+        <tr class="hover:bg-slate-50 transition table-row-fixed">
+          <td class="px-6 py-4 text-sm font-medium text-slate-900 align-top">{{ sale.id }}</td>
+          <td class="px-6 py-4 text-sm text-slate-600 align-top">{{ sale.sale_date|date:"M d, Y, h:i A" }}</td>
+          <td class="px-6 py-4 text-sm text-slate-600 align-top">{{ sale.user.username }}</td>
+          <td class="px-6 py-4 text-sm text-slate-600 max-w-sm align-top">
+            <span class="line-clamp-2" title="{% for item in sale.items.all %}{{ item.quantity }}x {{ item.product.name }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+              {% for item in sale.items.all %}
+                {{ item.quantity }}x {{ item.product.name }}{% if not forloop.last %}, {% endif %}
+              {% endfor %}
+            </span>
           </td>
-          <td class="px-6 py-4 text-sm font-semibold text-green-600">Rs {{ sale.total_profit }}</td>
+          <td class="px-6 py-4 text-sm font-semibold text-green-600 align-top">Rs {{ sale.total_profit }}</td>
         </tr>
         {% empty %}
-        <tr>
+        <tr class="table-row-fixed">
           <td colspan="5" class="px-6 py-8 text-center text-slate-500">
             No sales recorded yet. Click "Record Sale" to add one.
           </td>

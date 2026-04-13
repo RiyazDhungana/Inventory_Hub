@@ -31,7 +31,6 @@ urlpatterns = [
     # Sales workflow
     path("sales/", views.sale_list, name="sale_list"),
     path("sales/create/", views.create_sale, name="create_sale"),
-    path("sales/success/", views.sale_success, name="sale_success"),
 
     # Products
     path("products/", views.product_list, name="product_list"),
@@ -62,4 +61,9 @@ urlpatterns = [
     path("users/create/", views.user_create, name="user_create"),
     path("users/<int:pk>/edit/", views.user_edit, name="user_edit"),
     path("users/<int:pk>/delete/", views.user_delete, name="user_delete"),
+
+    # Forecasting
+    path("reports/forecast/", views.forecast_dashboard, name="forecast_dashboard"),
+    path("reports/forecast/accuracy/", views.forecast_accuracy_report, name="forecast_accuracy_report"),
+    path("products/<int:pk>/forecast/", views.product_forecast_detail, name="product_forecast_detail"),
 ]

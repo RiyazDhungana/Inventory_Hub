@@ -3,6 +3,7 @@ from decimal import Decimal
 from datetime import timedelta, date
 
 from django.db import models, transaction
+from django.apps import apps
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db.models import Sum, F, DecimalField, ExpressionWrapper
@@ -26,6 +27,7 @@ class Vendor(models.Model):
 
 class Product(models.Model):
     name = models.CharField(max_length=100)
+    sku = models.CharField(max_length=50, unique=True, null=True, blank=True, help_text="Unique Stock Keeping Unit (e.g., from Excel)")
     description = models.TextField(blank=True)
 
     cost_price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -48,17 +50,12 @@ class Product(models.Model):
     def clean(self):
         if self.stock_quantity < 0:
             raise ValidationError("Stock quantity cannot be negative.")
-
-        if self.pk:
-            from .models import SaleItem, PurchaseItem
-            has_transactions = (
-                SaleItem.objects.filter(product=self).exists() or
-                PurchaseItem.objects.filter(product=self).exists()
-            )
-            if has_transactions:
-                old = Product.objects.get(pk=self.pk)
-                if self.cost_price != old.cost_price:
-                    raise ValidationError("Cannot change cost price after transactions exist.")
+        
+        if self.cost_price <= 0:
+            raise ValidationError("Cost price must be greater than 0.")
+        
+        if self.selling_price <= 0:
+            raise ValidationError("Selling price must be greater than 0.")
 
     def save(self, *args, **kwargs):
         skip_stock_validation = kwargs.pop("skip_stock_validation", False)
@@ -197,17 +194,20 @@ class SaleItem(models.Model):
         self.full_clean()
         with transaction.atomic():
             if not self.pk:
-                self.total_price = self.quantity * self.product.selling_price
+                locked_product = Product.objects.select_for_update().get(pk=self.product_id)
+                self.product = locked_product
+                self.total_price = self.quantity * locked_product.selling_price
 
                 # --- FIFO Logic ---
                 remaining_to_fulfill = self.quantity
                 total_cost_accumulated = Decimal("0.00")
+                allocations = []
+
                 # Get non-empty batches, oldest expiry first
-                from .models import PurchaseItem, SaleItemBatch
                 batches = PurchaseItem.objects.filter(
-                    product=self.product, 
+                    product=locked_product,
                     current_stock__gt=0
-                ).order_by('expiry_date', 'id')
+                ).select_for_update().order_by('expiry_date', 'id')
 
                 for batch in batches:
                     if remaining_to_fulfill <= 0:
@@ -217,22 +217,47 @@ class SaleItem(models.Model):
                     batch.current_stock -= take
                     batch.save(update_fields=['current_stock'])
 
-                    # Record which batch was used
-                    SaleItemBatch.objects.create(
-                        sale_item=self,
-                        purchase_item=batch,
-                        quantity=take
-                    )
+                    allocations.append((batch, take))
                     
                     total_cost_accumulated += (Decimal(str(take)) * batch.cost_price)
                     remaining_to_fulfill -= take
 
+                if remaining_to_fulfill > 0:
+                    # Legacy/opening stock fallback: if no batch was consumed but global stock exists,
+                    # fulfill directly from product stock using product cost price.
+                    if not allocations and locked_product.stock_quantity >= self.quantity:
+                        total_cost_accumulated = Decimal(str(self.quantity)) * locked_product.cost_price
+                        remaining_to_fulfill = 0
+                    else:
+                        raise ValidationError({
+                            "quantity": f"Only {self.quantity - remaining_to_fulfill} items available in stock batches."
+                        })
+
+                if locked_product.stock_quantity < self.quantity:
+                    raise ValidationError({
+                        "quantity": f"Only {locked_product.stock_quantity} items available."
+                    })
+
                 # Update global product stock
-                self.product.stock_quantity -= self.quantity
-                self.product.save(update_fields=["stock_quantity"], skip_stock_validation=True)
-                
+                locked_product.stock_quantity -= self.quantity
+                locked_product.save(update_fields=["stock_quantity"], skip_stock_validation=True)
+
                 # Store historical cost for profit reporting
                 self.cost_at_sale = total_cost_accumulated
+
+                super().save(*args, **kwargs)
+
+                sale_item_batch_model = apps.get_model("inventory", "SaleItemBatch")
+                if allocations:
+                    sale_item_batch_model.objects.bulk_create([
+                        sale_item_batch_model(
+                            sale_item=self,
+                            purchase_item=batch,
+                            quantity=take,
+                        )
+                        for batch, take in allocations
+                    ])
+                return
 
             super().save(*args, **kwargs)
 
@@ -264,11 +289,17 @@ class StockAdjustment(models.Model):
         self.full_clean()
         with transaction.atomic():
             if not self.pk:
+                locked_product = Product.objects.select_for_update().get(pk=self.product_id)
+                self.product = locked_product
                 if self.adjustment_type == self.ADD:
-                    self.product.stock_quantity += self.quantity
+                    locked_product.stock_quantity += self.quantity
                 else:
-                    self.product.stock_quantity -= self.quantity
-                self.product.save(update_fields=["stock_quantity"], skip_stock_validation=True)
+                    if self.quantity > locked_product.stock_quantity:
+                        raise ValidationError({
+                            "quantity": f"Cannot remove {self.quantity}; only {locked_product.stock_quantity} in stock."
+                        })
+                    locked_product.stock_quantity -= self.quantity
+                locked_product.save(update_fields=["stock_quantity"], skip_stock_validation=True)
 
             super().save(*args, **kwargs)
 
@@ -337,3 +368,21 @@ class SaleItemBatch(models.Model):
 
     def __str__(self):
         return f"{self.quantity} from Batch {self.purchase_item.batch_number or self.purchase_item.id}"
+
+
+class DemandForecast(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="forecasts")
+    date = models.DateField()
+    predicted_quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    lower_bound = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    upper_bound = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["date"]
+        unique_together = ["product", "date"]
+        verbose_name = "Demand Forecast"
+        verbose_name_plural = "Demand Forecasts"
+
+    def __str__(self):
+        return f"Forecast for {self.product.name} on {self.date}"

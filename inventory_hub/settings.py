@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/6.0/topics/settings/
 
 from pathlib import Path
 import os
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 # -----------------------------------
@@ -21,9 +22,21 @@ load_dotenv(BASE_DIR / '.env')
 # -----------------------------------
 # SECURITY
 # -----------------------------------
-SECRET_KEY = os.environ.get('SECRET_KEY', 'fallback-insecure-key-change-me')
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
-ALLOWED_HOSTS = []
+DJANGO_ENV = os.environ.get('DJANGO_ENV', 'development').lower()
+DEBUG = os.environ.get('DEBUG', 'True' if DJANGO_ENV == 'development' else 'False').lower() == 'true'
+
+if DEBUG:
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-only-insecure-key-change-me')
+else:
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        raise ImproperlyConfigured('SECRET_KEY must be set when DEBUG is False.')
+
+raw_allowed_hosts = os.environ.get('ALLOWED_HOSTS', '')
+if raw_allowed_hosts.strip():
+    ALLOWED_HOSTS = [host.strip() for host in raw_allowed_hosts.split(',') if host.strip()]
+else:
+    ALLOWED_HOSTS = ['127.0.0.1', 'localhost'] if DEBUG else []
 
 # -----------------------------------
 # APPLICATIONS

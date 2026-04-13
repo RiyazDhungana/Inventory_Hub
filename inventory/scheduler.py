@@ -9,11 +9,11 @@ logger = logging.getLogger(__name__)
 _scheduler = BackgroundScheduler(timezone="Asia/Kathmandu")
 
 def start():
-    from inventory.cron import check_stock_and_expiry
+    from inventory.cron import check_stock_and_expiry, update_demand_forecasts
     from inventory.models import AlertSettings
 
     if _scheduler.running:
-        _scheduler.shutdown(wait=False)
+        _scheduler.shutdown(wait=True)
 
     alert_settings = AlertSettings.get_settings()
     
@@ -26,6 +26,15 @@ def start():
         trigger=CronTrigger(hour=alert_settings.alert_hour, minute=alert_settings.alert_minute),
         id="daily_stock_expiry_alert",
         name="Daily Stock & Expiry Email Alert",
+        replace_existing=True,
+    )
+
+    # Forecasting Job: update forecasts once a day (at 1 AM)
+    _scheduler.add_job(
+        update_demand_forecasts,
+        trigger=CronTrigger(hour=1, minute=0),
+        id="daily_demand_forecast",
+        name="Daily Demand Forecasting Update",
         replace_existing=True,
     )
 

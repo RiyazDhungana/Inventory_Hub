@@ -28,14 +28,29 @@ class AlertSettingsForm(forms.ModelForm):
 class ProductForm(forms.ModelForm):
     class Meta:
         model = Product
-        fields = ["name", "description", "cost_price", "selling_price", "stock_quantity", "minimum_stock", "shelf_life_days"]
+        fields = ["name", "sku", "description", "cost_price", "selling_price", "stock_quantity", "minimum_stock", "shelf_life_days"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"}),
+            "sku": forms.TextInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500", "placeholder": "StockCode (e.g. 85123A)"}),
             "description": forms.Textarea(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500", "rows": 3}),
             "cost_price": forms.NumberInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500", "step": "0.01"}),
             "selling_price": forms.NumberInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500", "step": "0.01"}),
             "stock_quantity": forms.NumberInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"}),
             "minimum_stock": forms.NumberInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"}),
+            "shelf_life_days": forms.NumberInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"}),
+        }
+
+class ProductEditForm(forms.ModelForm):
+    """Form for editing products with stock fields read-only."""
+    class Meta:
+        model = Product
+        fields = ["name", "sku", "description", "cost_price", "selling_price", "shelf_life_days"]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"}),
+            "sku": forms.TextInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500", "placeholder": "StockCode (e.g. 85123A)"}),
+            "description": forms.Textarea(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500", "rows": 3}),
+            "cost_price": forms.NumberInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500", "step": "0.01", "min": "0.01"}),
+            "selling_price": forms.NumberInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500", "step": "0.01", "min": "0.01"}),
             "shelf_life_days": forms.NumberInput(attrs={"class": "w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"}),
         }
 

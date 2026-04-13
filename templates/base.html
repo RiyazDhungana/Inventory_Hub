@@ -5,187 +5,728 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Inventory Hub</title>
+    <script src="https://code.iconify.design/3/3.1.1/iconify.min.js"></script>
     <link href="{% static 'css/output.css' %}" rel="stylesheet" />
+    <style>
+      .app-loader-overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(15, 23, 42, 0.45);
+        backdrop-filter: blur(1px);
+        z-index: 9999;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+
+      .app-loader-overlay.show {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .app-loader-card {
+        min-width: 220px;
+        border-radius: 0.75rem;
+        background: #0b1734;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: #e2e8f0;
+        padding: 1rem 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        box-shadow: 0 16px 40px rgba(2, 6, 23, 0.35);
+      }
+
+      .app-loader-spinner {
+        width: 1.2rem;
+        height: 1.2rem;
+        border-radius: 9999px;
+        border: 2px solid rgba(148, 163, 184, 0.35);
+        border-top-color: #38bdf8;
+        animation: app-spin 0.8s linear infinite;
+        flex-shrink: 0;
+      }
+
+      @keyframes app-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .sidebar-nav-hidden-scroll {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      .sidebar-nav-hidden-scroll::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+      }
+
+      .toast-container {
+        position: fixed;
+        top: 1.5rem;
+        right: 1.5rem;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        max-width: 24rem;
+      }
+
+      .toast {
+        min-width: 16rem;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: slideIn 0.3s ease-out;
+        word-break: break-word;
+      }
+
+      .toast.success {
+        background-color: #ecfdf5;
+        border: 1px solid #d1fae5;
+        color: #065f46;
+      }
+
+      .toast.error {
+        background-color: #fef2f2;
+        border: 1px solid #fee2e2;
+        color: #991b1b;
+      }
+
+      .toast.info {
+        background-color: #eff6ff;
+        border: 1px solid #dbeafe;
+        color: #0c2340;
+      }
+
+      .toast-message {
+        flex: 1;
+        font-size: 0.875rem;
+        font-weight: 500;
+      }
+
+      .toast-close {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.6;
+        transition: opacity 0.2s;
+        flex-shrink: 0;
+      }
+
+      .toast-close:hover {
+        opacity: 1;
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateX(24rem);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      @keyframes slideOut {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(24rem);
+          opacity: 0;
+        }
+      }
+
+      .toast.removing {
+        animation: slideOut 0.3s ease-out forwards;
+      }
+
+      @media (max-width: 640px) {
+        .toast-container {
+          left: 1rem;
+          right: 1rem;
+          max-width: none;
+        }
+      }
+
+      @media (min-width: 1024px) {
+        #sidebar {
+          width: 18rem;
+          transition:
+            width 0.25s ease,
+            box-shadow 0.25s ease;
+        }
+
+        #sidebar.sidebar-collapsed {
+          width: 5.75rem;
+        }
+
+        #sidebar.sidebar-collapsed .sidebar-brand-text,
+        #sidebar.sidebar-collapsed .sidebar-section-title,
+        #sidebar.sidebar-collapsed .sidebar-label,
+        #sidebar.sidebar-collapsed .sidebar-footer-text,
+        #sidebar.sidebar-collapsed .sidebar-user-text,
+        #sidebar.sidebar-collapsed .sidebar-logout-text {
+          opacity: 0;
+          visibility: hidden;
+          max-width: 0;
+          margin: 0;
+          overflow: hidden;
+          white-space: nowrap;
+          pointer-events: none;
+          transition:
+            opacity 0.2s ease,
+            max-width 0.25s ease,
+            visibility 0.2s ease;
+        }
+
+        #sidebar.sidebar-collapsed:hover {
+          width: 18rem;
+        }
+
+        #sidebar.sidebar-collapsed:hover .sidebar-brand-text,
+        #sidebar.sidebar-collapsed:hover .sidebar-section-title,
+        #sidebar.sidebar-collapsed:hover .sidebar-label,
+        #sidebar.sidebar-collapsed:hover .sidebar-footer-text,
+        #sidebar.sidebar-collapsed:hover .sidebar-user-text,
+        #sidebar.sidebar-collapsed:hover .sidebar-logout-text {
+          opacity: 1;
+          visibility: visible;
+          max-width: 18rem;
+          pointer-events: auto;
+        }
+
+        #sidebar.sidebar-collapsed .sidebar-item,
+        #sidebar.sidebar-collapsed .sidebar-group-heading,
+        #sidebar.sidebar-collapsed .sidebar-footer,
+        #sidebar.sidebar-collapsed .sidebar-brand {
+          justify-content: center;
+        }
+
+        #sidebar.sidebar-collapsed:hover .sidebar-item,
+        #sidebar.sidebar-collapsed:hover .sidebar-group-heading,
+        #sidebar.sidebar-collapsed:hover .sidebar-footer,
+        #sidebar.sidebar-collapsed:hover .sidebar-brand {
+          justify-content: flex-start;
+        }
+
+        #sidebar.sidebar-collapsed .sidebar-link {
+          gap: 0;
+        }
+
+        #sidebar.sidebar-collapsed:hover .sidebar-link {
+          gap: 0.75rem;
+        }
+      }
+    </style>
   </head>
   <body class="bg-slate-50 text-slate-900">
     {% if request.user.is_authenticated %}
-      <div class="flex h-screen overflow-hidden relative">
+    <div class="flex h-screen overflow-hidden relative">
+      <!-- Mobile Overlay -->
+      <div
+        id="sidebar-overlay"
+        class="fixed inset-0 bg-slate-900/50 z-40 hidden transition-opacity lg:hidden"
+      ></div>
 
-        <!-- Mobile Overlay -->
-        <div id="sidebar-overlay" class="fixed inset-0 bg-slate-900/50 z-40 hidden transition-opacity lg:hidden"></div>
+      <!-- Sidebar -->
+      <aside
+        id="sidebar"
+        class="w-64 bg-slate-900 text-white flex flex-col shrink-0 fixed inset-y-0 left-0 z-50 transform -translate-x-full lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out shadow-xl lg:shadow-none sidebar-collapsed"
+      >
+        <div
+          class="sidebar-brand p-4 lg:p-6 flex items-center justify-between gap-3"
+        >
+          <h1
+            class="text-2xl font-bold tracking-tight text-white flex items-center gap-3 min-w-0"
+          >
+            <img
+              src="{% static 'img/logo.png' %}"
+              alt="Inventory Hub Logo"
+              class="w-9 h-9 rounded-lg bg-white p-1"
+            />
+            <span class="sidebar-brand-text truncate">Inventory Hub</span>
+          </h1>
+          <button
+            id="close-sidebar-btn"
+            class="lg:hidden text-slate-300 hover:text-white focus:outline-none"
+            aria-label="Close sidebar"
+          >
+            <span class="iconify text-xl" data-icon="mdi:close"></span>
+          </button>
+        </div>
 
-        <!-- Sidebar -->
-        <aside id="sidebar" class="w-64 bg-slate-900 text-white flex flex-col shrink-0 fixed inset-y-0 left-0 z-50 transform -translate-x-full lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out shadow-xl lg:shadow-none">
-          
-          <div class="p-6 flex items-center justify-between">
-            <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-              <span class="text-sky-400">❖</span> Inventory Hub
-            </h1>
-            <button id="close-sidebar-btn" class="lg:hidden text-slate-300 hover:text-white focus:outline-none">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        <nav
+          class="sidebar-nav-hidden-scroll flex-1 px-4 space-y-1 overflow-y-auto"
+        >
+          <!-- Dashboard -->
+          <div
+            class="sidebar-group-heading px-3 pb-2 pt-4 lg:flex lg:justify-center"
+          >
+            <p
+              class="sidebar-section-title text-xs font-semibold text-slate-400 uppercase tracking-wider"
+            >
+              Overview
+            </p>
+          </div>
+
+          <a
+            href="{% url 'dashboard' %}"
+            aria-label="Dashboard"
+            title="Dashboard"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'dashboard' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:view-dashboard-outline"
+            ></span>
+            <span class="sidebar-label font-medium">Dashboard</span>
+          </a>
+
+          <!-- Inventory ops -->
+          <div
+            class="sidebar-group-heading px-3 pb-2 pt-6 lg:flex lg:justify-center"
+          >
+            <p
+              class="sidebar-section-title text-xs font-semibold text-slate-400 uppercase tracking-wider"
+            >
+              Inventory
+            </p>
+          </div>
+
+          {% if perms.inventory.add_product %}
+          <a
+            href="{% url 'product_list' %}"
+            aria-label="Products"
+            title="Products"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'products' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:tag-outline"
+            ></span>
+            <span class="sidebar-label font-medium">Products</span>
+          </a>
+          {% endif %} {% if perms.inventory.add_sale %}
+          <a
+            href="{% url 'sale_list' %}"
+            aria-label="Sales"
+            title="Sales"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'sales' in request.path and not 'reports' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:cart-outline"
+            ></span>
+            <span class="sidebar-label font-medium">Sales</span>
+          </a>
+          {% endif %} {% if perms.inventory.add_vendor %}
+          <a
+            href="{% url 'vendor_list' %}"
+            aria-label="Vendors"
+            title="Vendors"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'vendors' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:domain"
+            ></span>
+            <span class="sidebar-label font-medium">Vendors</span>
+          </a>
+          {% endif %} {% if perms.inventory.add_purchase %}
+          <a
+            href="{% url 'purchase_list' %}"
+            aria-label="Purchases"
+            title="Purchases"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'purchases' in request.path and not 'reports' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:package-variant-closed"
+            ></span>
+            <span class="sidebar-label font-medium">Purchases</span>
+          </a>
+          {% endif %} {% if perms.inventory.add_stockadjustment %}
+          <a
+            href="{% url 'stock_adjustment_list' %}"
+            aria-label="Adjustments"
+            title="Adjustments"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'stock-adjustments' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:wrench-outline"
+            ></span>
+            <span class="sidebar-label font-medium">Adjustments</span>
+          </a>
+          {% endif %}
+
+          <!-- Intelligence / Reports -->
+          <div
+            class="sidebar-group-heading px-3 pb-2 pt-6 lg:flex lg:justify-center"
+          >
+            <p
+              class="sidebar-section-title text-xs font-semibold text-slate-400 uppercase tracking-wider"
+            >
+              Reports
+            </p>
+          </div>
+
+          {% if perms.inventory.view_profit_dashboard %}
+          <a
+            href="{% url 'profit_report' %}"
+            aria-label="Profit Report"
+            title="Profit Report"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'profit_report' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:chart-box-outline"
+            ></span>
+            <span class="sidebar-label font-medium">Profit Report</span>
+          </a>
+
+          <a
+            href="{% url 'sales_report' %}"
+            aria-label="Sales Report"
+            title="Sales Report"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'sales_report' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:chart-line"
+            ></span>
+            <span class="sidebar-label font-medium">Sales Report</span>
+          </a>
+          <a
+            href="{% url 'purchase_report' %}"
+            aria-label="Purchase Report"
+            title="Purchase Report"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'purchase_report' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:chart-bar"
+            ></span>
+            <span class="sidebar-label font-medium">Purchase Report</span>
+          </a>
+          <a
+            href="{% url 'forecast_dashboard' %}"
+            aria-label="Demand Forecast"
+            title="Demand Forecast"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'forecast' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:chart-areaspline"
+            ></span>
+            <span class="sidebar-label font-medium text-sky-400"
+              >Demand Forecast</span
+            >
+          </a>
+          {% endif %} {% if perms.inventory.view_low_stock_alerts %}
+          <a
+            href="{% url 'discount_report' %}"
+            aria-label="Discount Report"
+            title="Discount Report"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'discount_report' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:cash-multiple"
+            ></span>
+            <span class="sidebar-label font-medium">Discount Report</span>
+          </a>
+          <a
+            href="{% url 'expiry_report' %}"
+            aria-label="Expiry Report"
+            title="Expiry Report"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'expiry_report' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:clock-outline"
+            ></span>
+            <span class="sidebar-label font-medium">Expiry Report</span>
+          </a>
+          <a
+            href="{% url 'low_stock_alerts' %}"
+            aria-label="Low Stock"
+            title="Low Stock"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'low_stock_alerts' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:alert-outline"
+            ></span>
+            <span class="sidebar-label font-medium">Low Stock</span>
+          </a>
+          {% endif %}
+
+          <!-- Settings -->
+          <div
+            class="sidebar-group-heading px-3 pb-2 pt-6 lg:flex lg:justify-center"
+          >
+            <p
+              class="sidebar-section-title text-xs font-semibold text-slate-400 uppercase tracking-wider"
+            >
+              Settings
+            </p>
+          </div>
+          {% if perms.inventory.change_alertsettings %}
+          <a
+            href="{% url 'alert_settings' %}"
+            aria-label="Email Alerts"
+            title="Email Alerts"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'settings/alerts' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:bell-outline"
+            ></span>
+            <span class="sidebar-label font-medium">Email Alerts</span>
+          </a>
+          {% endif %} {% if request.user.is_superuser %}
+          <a
+            href="{% url 'user_list' %}"
+            aria-label="Users"
+            title="Users"
+            class="sidebar-item sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'users' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}"
+          >
+            <span
+              class="iconify text-xl shrink-0"
+              data-icon="mdi:account-group-outline"
+            ></span>
+            <span class="sidebar-label font-medium">Users</span>
+          </a>
+          {% endif %}
+        </nav>
+
+        <div
+          class="sidebar-footer p-4 border-t border-slate-800 bg-slate-950/50"
+        >
+          <div class="flex items-center gap-3 mb-4 px-2">
+            <div
+              class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-sm font-bold text-slate-900 shadow-sm shrink-0"
+            >
+              {{ request.user.username|make_list|first|upper }}
+            </div>
+            <div class="sidebar-user-text text-sm truncate">
+              <p class="font-semibold text-white truncate">
+                {{ request.user.username }}
+              </p>
+              <p class="sidebar-footer-text text-xs text-slate-300 truncate">
+                Logged in
+              </p>
+            </div>
+          </div>
+          <a
+            href="{% url 'logout' %}"
+            aria-label="Logout"
+            title="Logout"
+            class="sidebar-logout flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-red-500 hover:text-white transition text-sm font-medium text-slate-200"
+          >
+            <span
+              class="iconify text-lg shrink-0"
+              data-icon="mdi:logout"
+            ></span>
+            <span class="sidebar-logout-text">Logout</span>
+          </a>
+        </div>
+      </aside>
+
+      <!-- Main Wrapper -->
+      <div class="flex-1 flex flex-col h-screen w-full overflow-hidden">
+        <!-- Mobile Header (Visible only on small screens) -->
+        <header
+          class="bg-white border-b border-slate-200 flex items-center justify-between p-4 shadow-sm z-30"
+        >
+          <div class="flex items-center gap-3">
+            <button
+              id="mobile-menu-btn"
+              class="text-slate-500 hover:text-slate-800 focus:outline-none bg-slate-100 p-2 rounded-lg"
+              aria-label="Toggle sidebar"
+            >
+              <span class="iconify text-2xl" data-icon="mdi:menu"></span>
             </button>
+            <h1
+              class="font-bold text-lg text-slate-800 tracking-tight flex items-center gap-2"
+            >
+              <img
+                src="{% static 'img/logo.png' %}"
+                alt="Logo"
+                class="w-7 h-7 rounded-md"
+              />
+              Inventory Hub
+            </h1>
           </div>
-          
-          <nav class="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar">
-            <!-- Dashboard -->
-            <div class="px-3 pb-2 pt-4">
-              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Overview</p>
-            </div>
-            
-            <a href="{% url 'dashboard' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'dashboard' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">🏠</span> <span class="font-medium">Dashboard</span>
-            </a>
-            
-            <!-- Inventory ops -->
-            <div class="px-3 pb-2 pt-6">
-              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Inventory</p>
-            </div>
+        </header>
 
-            {% if perms.inventory.add_product %}
-            <a href="{% url 'product_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'products' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">🏷️</span> <span class="font-medium">Products</span>
-            </a>
-            {% endif %}
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto w-full bg-slate-50">
+          {% block content %}{% endblock %}
+        </main>
+      </div>
+    </div>
 
-            {% if perms.inventory.add_sale %}
-            <a href="{% url 'sale_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'sales' in request.path and not 'reports' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">🛒</span> <span class="font-medium">Sales</span>
-            </a>
-            {% endif %}
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
 
-            {% if perms.inventory.add_vendor %}
-            <a href="{% url 'vendor_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'vendors' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">🏢</span> <span class="font-medium">Vendors</span>
-            </a>
-            {% endif %}
-
-            {% if perms.inventory.add_purchase %}
-            <a href="{% url 'purchase_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'purchases' in request.path and not 'reports' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">📦</span> <span class="font-medium">Purchases</span>
-            </a>
-            {% endif %}
-
-            {% if perms.inventory.add_stockadjustment %}
-            <a href="{% url 'stock_adjustment_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'stock-adjustments' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">🔧</span> <span class="font-medium">Adjustments</span>
-            </a>
-            {% endif %}
-
-            <!-- Intelligence / Reports -->
-            <div class="px-3 pb-2 pt-6">
-              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Reports</p>
-            </div>
-
-            {% if perms.inventory.view_profit_dashboard %}
-            <a href="{% url 'profit_report' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'profit_report' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">📊</span> <span class="font-medium">Profit Report</span>
-            </a>
-            
-            <a href="{% url 'sales_report' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'sales_report' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">📈</span> <span class="font-medium">Sales Report</span>
-            </a>
-            <a href="{% url 'purchase_report' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'purchase_report' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">📉</span> <span class="font-medium">Purchase Report</span>
-            </a>
-            {% endif %}
-
-            {% if perms.inventory.view_low_stock_alerts %}
-            <a href="{% url 'discount_report' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'discount_report' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">💰</span> <span class="font-medium">Discount Report</span>
-            </a>
-            <a href="{% url 'expiry_report' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'expiry_report' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">⏳</span> <span class="font-medium">Expiry Report</span>
-            </a>
-            <a href="{% url 'low_stock_alerts' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if request.resolver_match.url_name == 'low_stock_alerts' %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">⚠️</span> <span class="font-medium">Low Stock</span>
-            </a>
-            {% endif %}
-
-            <!-- Settings -->
-            <div class="px-3 pb-2 pt-6">
-              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Settings</p>
-            </div>
-            {% if perms.inventory.change_alertsettings %}
-            <a href="{% url 'alert_settings' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'settings/alerts' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">🔔</span> <span class="font-medium">Email Alerts</span>
-            </a>
-            {% endif %}
-
-            {% if request.user.is_superuser %}
-            <a href="{% url 'user_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition {% if 'users' in request.path %}bg-slate-800 text-white{% else %}text-slate-200{% endif %}">
-              <span class="text-xl">👥</span> <span class="font-medium">Users</span>
-            </a>
-            {% endif %}
-
-          </nav>
-
-          <div class="p-4 border-t border-slate-800 bg-slate-950/50">
-            <div class="flex items-center gap-3 mb-4 px-2">
-              <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-sm font-bold text-slate-900 shadow-sm">
-                {{ request.user.username|make_list|first|upper }}
-              </div>
-              <div class="text-sm truncate">
-                <p class="font-semibold text-white truncate">{{ request.user.username }}</p>
-                <p class="text-xs text-slate-300 truncate">Logged in</p>
-              </div>
-            </div>
-            <a href="{% url 'logout' %}" class="block w-full text-center px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-red-500 hover:text-white transition text-sm font-medium text-slate-200">
-              Logout
-            </a>
-          </div>
-        </aside>
-
-        <!-- Main Wrapper -->
-        <div class="flex-1 flex flex-col h-screen w-full overflow-hidden">
-          
-          <!-- Mobile Header (Visible only on small screens) -->
-          <header class="bg-white border-b border-slate-200 lg:hidden flex items-center justify-between p-4 shadow-sm z-30">
-            <div class="flex items-center gap-3">
-              <button id="mobile-menu-btn" class="text-slate-500 hover:text-slate-800 focus:outline-none bg-slate-100 p-2 rounded-lg">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-              </button>
-              <h1 class="font-bold text-lg text-slate-800 tracking-tight flex items-center gap-2">
-                <span class="text-sky-600">❖</span> Inventory Hub
-              </h1>
-            </div>
-          </header>
-
-          <!-- Main Content -->
-          <main class="flex-1 overflow-y-auto w-full bg-slate-50">
+    <!-- Hidden messages container for toast rendering -->
+    {% if messages %}
+      {% for message in messages %}
+        <div class="hidden" data-message="{{ message }}" data-tags="{% if message.tags %}{{ message.tags }}{% else %}info{% endif %}"></div>
+      {% endfor %}
     {% endif %}
 
-            {% block content %}{% endblock %}
-
-    {% if request.user.is_authenticated %}
-          </main>
+    <div id="app-loader-overlay" class="app-loader-overlay" aria-hidden="true">
+      <div class="app-loader-card" role="status" aria-live="polite">
+        <span class="app-loader-spinner"></span>
+        <div>
+          <p class="text-sm font-semibold">Please wait...</p>
+          <p class="text-xs text-slate-300">Processing your request</p>
         </div>
       </div>
+    </div>
 
-      <script>
-        // Mobile Sidebar Toggle Logic
-        document.addEventListener("DOMContentLoaded", function () {
-          const sidebar = document.getElementById("sidebar");
-          const overlay = document.getElementById("sidebar-overlay");
-          const menuBtn = document.getElementById("mobile-menu-btn");
-          const closeBtn = document.getElementById("close-sidebar-btn");
+    <script>
+      // Mobile Sidebar Toggle Logic
+      document.addEventListener("DOMContentLoaded", function () {
+        const sidebar = document.getElementById("sidebar");
+        const overlay = document.getElementById("sidebar-overlay");
+        const menuBtn = document.getElementById("mobile-menu-btn");
+        const closeBtn = document.getElementById("close-sidebar-btn");
+        const appLoader = document.getElementById("app-loader-overlay");
 
-          function openSidebar() {
-            if (!sidebar || !overlay) return;
+        function showAppLoader() {
+          if (!appLoader) return;
+          appLoader.classList.add("show");
+          appLoader.setAttribute("aria-hidden", "false");
+        }
+
+        function isDesktop() {
+          return window.matchMedia("(min-width: 1024px)").matches;
+        }
+
+        function openSidebar() {
+          if (!sidebar || !overlay) return;
+          if (isDesktop()) {
+            sidebar.classList.remove("sidebar-collapsed");
+            sidebar.classList.add("sidebar-pinned-open");
+          } else {
             sidebar.classList.remove("-translate-x-full");
             overlay.classList.remove("hidden");
           }
+        }
 
-          function closeSidebar() {
-            if (!sidebar || !overlay) return;
+        function closeSidebar() {
+          if (!sidebar || !overlay) return;
+          if (isDesktop()) {
+            sidebar.classList.add("sidebar-collapsed");
+            sidebar.classList.remove("sidebar-pinned-open");
+          } else {
             sidebar.classList.add("-translate-x-full");
             overlay.classList.add("hidden");
           }
+        }
 
-          if (menuBtn) menuBtn.addEventListener("click", openSidebar);
-          if (closeBtn) closeBtn.addEventListener("click", closeSidebar);
-          if (overlay) overlay.addEventListener("click", closeSidebar);
+        function toggleSidebar() {
+          if (!sidebar) return;
+          if (isDesktop()) {
+            if (sidebar.classList.contains("sidebar-collapsed")) {
+              openSidebar();
+            } else {
+              closeSidebar();
+            }
+          } else if (sidebar.classList.contains("-translate-x-full")) {
+            openSidebar();
+          } else {
+            closeSidebar();
+          }
+        }
+
+        if (menuBtn) menuBtn.addEventListener("click", toggleSidebar);
+        if (closeBtn) closeBtn.addEventListener("click", toggleSidebar);
+        if (overlay) overlay.addEventListener("click", closeSidebar);
+
+        document
+          .querySelectorAll("form[data-show-loader='true']")
+          .forEach(function (form) {
+            form.addEventListener("submit", function () {
+              showAppLoader();
+            });
+          });
+
+        document
+          .querySelectorAll("a[data-show-loader='true']")
+          .forEach(function (link) {
+            link.addEventListener("click", function () {
+              showAppLoader();
+            });
+          });
+
+        // Toast notification system
+        const toastContainer = document.getElementById("toast-container");
+        
+        function showToast(message, type = "info", duration = 4000) {
+          const toast = document.createElement("div");
+          toast.className = `toast ${type}`;
+          
+          const icon = type === "success" ? "✓" : type === "error" ? "✕" : "ℹ";
+          
+          toast.innerHTML = `
+            <span style="font-weight: bold;">${icon}</span>
+            <div class="toast-message">${message}</div>
+            <button class="toast-close" aria-label="Close notification">
+              <span style="font-size: 1.2rem; line-height: 1;">×</span>
+            </button>
+          `;
+          
+          toastContainer.appendChild(toast);
+          
+          const closeButton = toast.querySelector(".toast-close");
+          closeButton.addEventListener("click", function () {
+            removeToast(toast);
+          });
+          
+          if (duration > 0) {
+            setTimeout(function () {
+              removeToast(toast);
+            }, duration);
+          }
+        }
+        
+        function removeToast(toast) {
+          toast.classList.add("removing");
+          setTimeout(function () {
+            toast.remove();
+          }, 300);
+        }
+        
+        // Display Django messages as toasts
+        const messagesElements = document.querySelectorAll("[data-message]");
+        messagesElements.forEach(function (element) {
+          const message = element.getAttribute("data-message");
+          const tags = element.getAttribute("data-tags") || "info";
+          showToast(message, tags);
         });
-      </script>
+      });
+    </script>
     {% endif %}
   </body>
 </html>

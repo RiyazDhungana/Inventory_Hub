@@ -5,6 +5,32 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.contrib.auth.models import User
 import datetime
+import os
+import logging
+from .forecasting import run_forecast_for_product, ingest_excel_history
+
+logger = logging.getLogger(__name__)
+
+def update_demand_forecasts():
+    """
+    Refreshes the 30-day demand forecast for all products.
+    """
+    excel_path = os.path.join(settings.BASE_DIR, "Online Retail.xlsx")
+    excel_df = None
+    if os.path.exists(excel_path):
+        excel_df = ingest_excel_history(excel_path)
+    
+    products = Product.objects.all()
+    count = 0
+    for p in products:
+        # Note: In a production environment with thousands of products, 
+        # this should be processed in background tasks (like Huey/Celery) 
+        # to avoid blocking the main scheduler for too long.
+        if run_forecast_for_product(p.id, excel_df):
+            count += 1
+    
+    logger.info(f"Successfully updated forecasts for {count} products.")
+
 
 def check_stock_and_expiry():
     alert_settings = AlertSettings.get_settings()

@@ -1,0 +1,309 @@
+{% extends 'base.html' %} {% block content %}
+<div class="p-6 md:p-10 w-full max-w-7xl mx-auto overflow-x-hidden">
+  <div
+    class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4"
+  >
+    <div>
+      <h1 class="text-3xl font-bold text-slate-800 tracking-tight">
+        Forecast Accuracy Report
+      </h1>
+      <p class="text-slate-500 mt-1">
+        Evaluation of Prophet forecasts against held-out test data.
+      </p>
+    </div>
+    <div class="flex flex-wrap gap-3">
+      <form method="post" class="inline-flex" data-show-loader="true">
+        {% csrf_token %}
+        <button
+          type="submit"
+          class="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-semibold border border-rose-600 flex items-center gap-2 hover:bg-rose-700 transition"
+        >
+          <span>↻</span> Generate / Refresh Report
+        </button>
+      </form>
+      <a
+        href="{% url 'forecast_dashboard' %}"
+        class="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-semibold border border-blue-100 flex items-center gap-2 hover:bg-blue-100 transition"
+      >
+        <span>←</span> Forecast Dashboard
+      </a>
+    </div>
+  </div>
+
+  {% if report_available and rows %}
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
+    <div class="bg-white rounded-xl shadow border border-slate-100 p-5">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        Models Compared
+      </p>
+      <p class="text-3xl font-black text-slate-800 mt-2">{{ total_models }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow border border-slate-100 p-5">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        Average MAE
+      </p>
+      <p class="text-3xl font-black text-blue-600 mt-2">
+        {{ average_mae_display }}
+      </p>
+    </div>
+    <div class="bg-white rounded-xl shadow border border-slate-100 p-5">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        Average RMSE
+      </p>
+      <p class="text-3xl font-black text-emerald-600 mt-2">
+        {{ average_rmse_display }}
+      </p>
+    </div>
+    <div class="bg-white rounded-xl shadow border border-slate-100 p-5">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        Average MAPE
+      </p>
+      <p class="text-3xl font-black text-rose-600 mt-2">
+        {{ average_mape_display }}
+      </p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+    <div
+      class="xl:col-span-2 bg-white rounded-2xl shadow border border-slate-100 p-6"
+    >
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-slate-800">MAPE by Product</h2>
+        <span
+          class="text-xs font-semibold text-slate-400 uppercase tracking-wider"
+          >Lower is better</span
+        >
+      </div>
+      <div class="h-[420px]">
+        <canvas id="accuracyChart"></canvas>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <div class="bg-white rounded-2xl shadow border border-slate-100 p-6">
+        <h2 class="text-lg font-bold text-slate-800 mb-4">Best Result</h2>
+        {% if best_row %}
+        <p class="font-semibold text-slate-900">{{ best_row.product_name }}</p>
+        <p class="text-sm text-slate-500 mt-1">SKU {{ best_row.sku }}</p>
+        <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div class="rounded-lg bg-slate-50 p-3">
+            <p class="text-slate-400 text-xs uppercase">MAE</p>
+            <p class="font-bold text-slate-800">{{ best_row.mae }}</p>
+          </div>
+          <div class="rounded-lg bg-slate-50 p-3">
+            <p class="text-slate-400 text-xs uppercase">MAPE</p>
+            <p class="font-bold text-slate-800">{{ best_row.mape_display }}</p>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="bg-white rounded-2xl shadow border border-slate-100 p-6">
+        <h2 class="text-lg font-bold text-slate-800 mb-4">How to Read This</h2>
+        <p class="text-sm text-slate-600 leading-relaxed">
+          MAE and RMSE measure forecast error in units sold. MAPE shows relative
+          error as a percentage. Lower values mean the forecast matched the
+          hold-out data more closely.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white rounded-2xl shadow border border-slate-100 p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-slate-800">Average Error Snapshot</h2>
+        <span
+          class="text-xs font-semibold text-slate-400 uppercase tracking-wider"
+          >Defense summary</span
+        >
+      </div>
+      <div class="h-[320px]">
+        <canvas id="summaryChart"></canvas>
+      </div>
+    </div>
+
+    <div
+      class="bg-slate-900 rounded-2xl shadow-xl p-6 text-white overflow-hidden relative"
+    >
+      <div class="relative z-10">
+        <h2 class="text-lg font-black text-white mb-2">
+          Why this helps your final defense
+        </h2>
+        <p class="text-sm text-slate-300 leading-relaxed mb-4">
+          This page gives you objective model evaluation, not just predictions.
+          You can show that the forecast is tested against hold-out data,
+          compare MAE/RMSE/MAPE, and explain how error changes by product.
+        </p>
+        <ul class="space-y-2 text-sm text-slate-200">
+          <li>• Shows model quality with measurable metrics.</li>
+          <li>
+            • Demonstrates reproducible evaluation from saved forecast files.
+          </li>
+          <li>
+            • Makes it easier to justify why the forecasting module is reliable
+            enough for deployment.
+          </li>
+        </ul>
+      </div>
+      <div
+        class="absolute -bottom-10 -right-10 w-32 h-32 bg-rose-500/20 rounded-full blur-2xl"
+      ></div>
+    </div>
+  </div>
+
+  <div
+    class="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden"
+  >
+    <div
+      class="px-6 py-4 border-b border-slate-100 flex items-center justify-between"
+    >
+      <h2 class="text-lg font-bold text-slate-800">Per-Product Metrics</h2>
+      <p class="text-sm text-slate-500">Source: {{ report_path }}</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-200">
+        <thead class="bg-slate-50">
+          <tr>
+            <th
+              class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+            >
+              Product
+            </th>
+            <th
+              class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+            >
+              SKU
+            </th>
+            <th
+              class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+            >
+              Points
+            </th>
+            <th
+              class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+            >
+              MAE
+            </th>
+            <th
+              class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+            >
+              RMSE
+            </th>
+            <th
+              class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+            >
+              MAPE
+            </th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for row in rows %}
+          <tr class="hover:bg-slate-50">
+            <td class="px-6 py-4 text-sm font-medium text-slate-900">
+              {{ row.product_name }}
+            </td>
+            <td class="px-6 py-4 text-sm text-slate-600">{{ row.sku }}</td>
+            <td class="px-6 py-4 text-sm text-slate-600">
+              {{ row.points_compared }}
+            </td>
+            <td class="px-6 py-4 text-sm text-slate-600">{{ row.mae }}</td>
+            <td class="px-6 py-4 text-sm text-slate-600">{{ row.rmse }}</td>
+            <td
+              class="px-6 py-4 text-sm font-semibold {% if row.mape_has_value %}text-rose-600{% else %}text-slate-400{% endif %}"
+            >
+              {{ row.mape_display }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div
+    class="bg-white rounded-2xl shadow border border-dashed border-slate-200 p-10 text-center"
+  >
+    <h2 class="text-xl font-bold text-slate-800">
+      No accuracy report found yet
+    </h2>
+    <p class="text-slate-500 mt-2 max-w-2xl mx-auto">
+      Generate
+      <span class="font-semibold"
+        >presentation_artifacts/accuracy_report.csv</span
+      >
+      by running
+      <span class="font-semibold">prophet_presentation_accuracy.py</span>, then
+      refresh this page.
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const canvas = document.getElementById("accuracyChart");
+    if (!canvas) return;
+
+    const labels = JSON.parse('{{ chart_labels|default:"[]"|escapejs }}');
+    const values = JSON.parse('{{ chart_mape|default:"[]"|escapejs }}');
+    const summaryCanvas = document.getElementById("summaryChart");
+    const averageMae = {{ average_mae|default:"null" }};
+    const averageRmse = {{ average_rmse|default:"null" }};
+    const averageMape = {{ average_mape|default:"null" }};
+    if (!labels.length) return;
+
+    new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "MAPE %",
+          data: values,
+          backgroundColor: "rgba(244, 63, 94, 0.7)",
+          borderColor: "rgb(244, 63, 94)",
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: "y",
+        plugins: {
+          legend: { position: "bottom" },
+        },
+        scales: {
+          x: { beginAtZero: true },
+        },
+      },
+    });
+
+    if (summaryCanvas) {
+      new Chart(summaryCanvas, {
+        type: "bar",
+        data: {
+          labels: ["MAE", "RMSE", "MAPE"],
+          datasets: [{
+            label: "Average Error",
+            data: [averageMae || 0, averageRmse || 0, averageMape || 0],
+            backgroundColor: ["rgba(59, 130, 246, 0.75)", "rgba(16, 185, 129, 0.75)", "rgba(244, 63, 94, 0.75)"],
+            borderWidth: 1,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+          },
+          scales: {
+            y: { beginAtZero: true },
+          },
+        },
+      });
+    }
+  });
+</script>
+{% endblock %}

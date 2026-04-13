@@ -1,66 +1,73 @@
-{% extends 'base.html' %}
 {% load static %}
-
-{% block content %}
-<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-200 px-4">
-  <div class="w-full max-w-md">
-    <div class="bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
-      <div class="text-center mb-8">
-        <h1 class="text-2xl font-bold text-slate-800">Inventory Hub</h1>
-        <p class="text-slate-500 mt-1 text-sm">Smart Inventory Management</p>
-      </div>
-
-      <form method="post" action="" class="space-y-5">
-        {% csrf_token %}
-
-        {% if form.non_field_errors %}
-          <div class="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
-            {{ form.non_field_errors }}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inventory Hub - Login</title>
+    <link href="{% static 'css/output.css' %}" rel="stylesheet" />
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-200 px-4">
+      <div class="w-full max-w-md">
+        <div class="bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
+          <div class="text-center mb-8">
+            <h1 class="text-2xl font-bold text-slate-800">Inventory Hub</h1>
+            <p class="text-slate-500 mt-1 text-sm">Smart Inventory Management</p>
           </div>
-        {% endif %}
 
-        <div>
-          <label for="id_username" class="block text-sm font-medium text-slate-700 mb-1">Username</label>
-          <input
-            type="text"
-            name="username"
-            id="id_username"
-            autofocus
-            required
-            class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-            placeholder="Enter your username"
-          />
+          <form method="post" action="" class="space-y-5">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+              <div class="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+              </div>
+            {% endif %}
+
+            <div>
+              <label for="id_username" class="block text-sm font-medium text-slate-700 mb-1">Username</label>
+              <input
+                type="text"
+                name="username"
+                id="id_username"
+                autofocus
+                required
+                class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                placeholder="Enter your username"
+              />
+            </div>
+
+            <div>
+              <label for="id_password" class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+              <input
+                type="password"
+                name="password"
+                id="id_password"
+                required
+                class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                placeholder="Enter your password"
+              />
+            </div>
+
+            {% if next %}
+              <input type="hidden" name="next" value="{{ next }}" />
+            {% endif %}
+
+            <button
+              type="submit"
+              class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition"
+            >
+              Sign In
+            </button>
+          </form>
+
+          <p class="mt-6 text-center text-sm text-slate-500">
+            <a href="{% url 'admin:index' %}" class="text-blue-600 hover:underline">Go to Admin Panel</a>
+          </p>
         </div>
-
-        <div>
-          <label for="id_password" class="block text-sm font-medium text-slate-700 mb-1">Password</label>
-          <input
-            type="password"
-            name="password"
-            id="id_password"
-            required
-            class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-            placeholder="Enter your password"
-          />
-        </div>
-
-        {% if next %}
-          <input type="hidden" name="next" value="{{ next }}" />
-        {% endif %}
-
-        <button
-          type="submit"
-          class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition"
-        >
-          Sign In
-        </button>
-      </form>
-
-      <p class="mt-6 text-center text-sm text-slate-500">
-        <a href="{% url 'admin:index' %}" class="text-blue-600 hover:underline">Go to Admin Panel</a>
-      </p>
+      </div>
     </div>
-  </div>
-</div>
-{% endblock %}
+  </body>
+</html>
 

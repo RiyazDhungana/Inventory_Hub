@@ -5,7 +5,7 @@
   "main": "index.js",
   "concurrently": "^8.0.0",
   "scripts": {
-    "dev": "concurrently \"npx tailwindcss -i ./static/css/styles.css -o ./static/css/output.css --watch\" \"start http://127.0.0.1:8000/ & python manage.py runserver\""
+    "dev": "concurrently \"npx tailwindcss -i ./static/css/styles.css -o ./static/css/output.css --watch\" \".\\.venv\\Scripts\\python.exe manage.py runserver\" \"npx wait-on tcp:127.0.0.1:8000 && start http://127.0.0.1:8000/\""
   },
   "repository": {
     "type": "git",
@@ -23,6 +23,7 @@
     "autoprefixer": "^10.4.27",
     "concurrently": "^9.2.1",
     "postcss": "^8.5.8",
-    "tailwindcss": "^3.3.3"
+    "tailwindcss": "^3.3.3",
+    "wait-on": "^8.0.1"
   }
 }

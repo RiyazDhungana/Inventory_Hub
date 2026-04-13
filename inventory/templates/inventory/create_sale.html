@@ -17,6 +17,12 @@
           </div>
         {% endif %}
 
+        {% if not has_available_products %}
+          <div class="p-4 rounded-lg bg-amber-50 text-amber-800 text-sm border border-amber-200">
+            No products currently have batch stock available. Add purchase stock first, then create the sale.
+          </div>
+        {% endif %}
+
         <div id="line-items" class="space-y-4">
           <div class="line-item-row flex flex-col md:flex-row md:items-center gap-4">
             <div class="flex-1">
@@ -30,10 +36,11 @@
                 {% for product in products %}
                   <option
                     value="{{ product.id }}"
-                    {% if product.stock_quantity == 0 %}disabled{% endif %}
+                    {% if not product.is_available_for_sale %}disabled{% endif %}
                   >
-                    {{ product.name }} — Price: {{ product.selling_price }} | Stock: {{ product.stock_quantity }}
-                    {% if product.stock_quantity == 0 %}(OUT OF STOCK){% endif %}
+                    {{ product.name }} — Price: {{ product.selling_price }} | Stock: {{ product.available_stock|default:0 }}
+                    {% if product.batch_stock == 0 and product.available_stock > 0 %}(OPENING STOCK){% endif %}
+                    {% if not product.is_available_for_sale %}(OUT OF STOCK){% endif %}
                   </option>
                 {% endfor %}
               </select>
